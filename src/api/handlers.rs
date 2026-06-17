@@ -4,6 +4,7 @@ use hex;
 use serde::{Deserialize, Serialize};
 
 use crate::gateway::crypto::global_registry;
+use crate::soroban::sequencer::{global_sequencer, NonceStatus};
 use crate::time_series::analytics::{global_engine, DiagnosticReport};
 
 #[derive(Serialize)]
@@ -73,6 +74,10 @@ pub async fn get_diagnostics(
         .get_diagnostics(&meter_id)
         .map(Json)
         .ok_or(StatusCode::NOT_FOUND)
+}
+
+pub async fn nonce_status() -> Json<NonceStatus> {
+    Json(global_sequencer().status())
 }
 
 pub async fn metrics_handler() -> &'static str {
