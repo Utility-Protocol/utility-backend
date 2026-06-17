@@ -1,5 +1,7 @@
+use crate::api::metrics;
 use deadpool_postgres::tokio_postgres::NoTls;
 use deadpool_postgres::{Config, ManagerConfig, Pool, RecyclingMethod, Runtime};
+use std::time::Duration;
 use tracing::info;
 
 pub struct TenantPool {
@@ -38,5 +40,38 @@ impl MultiTenantPoolManager {
             .iter()
             .find(|t| t.tenant_id == tenant_id)
             .map(|t| &t.pool)
+    }
+
+    pub async fn get_connection(
+        &self,
+        tenant_id: &str,
+    ) -> Result<
+        deadpool_postgres::Object,
+        deadpool_postgres::PoolError,
+    > {
+        let pool = self.get_pool(tenant_id).ok_or_else(|| {
+            deadpool_postgres::PoolError::NoConnectionSlot(Box::new(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("no pool for tenant {}", tenant_id),
+            )))
+        })?;
+
+        match tokio::time::timeout(Duration::from_secs(5), pool.get()).await {
+            Ok(Ok(conn)) => Ok(conn),
+            Ok(Err(e)) => {
+                metrics::record_db_starvation();
+                Err(e)
+            }
+            Err(_) => {
+                metrics::record_db_starvation();
+                Err(deadpool_postgres::PoolError::Timeout(
+                    "connection acquisition timed out".into(),
+                ))
+            }
+        }
+    }
+
+    pub fn pools(&self) -> &[TenantPool] {
+        &self.pools
     }
 }
