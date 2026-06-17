@@ -44,16 +44,10 @@ impl MultiTenantPoolManager {
     pub async fn get_connection(
         &self,
         tenant_id: &str,
-    ) -> Result<
-        deadpool_postgres::Object,
-        deadpool_postgres::PoolError,
-    > {
-        let pool = self.get_pool(tenant_id).ok_or_else(|| {
-            deadpool_postgres::PoolError::NoConnectionSlot(Box::new(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                format!("no pool for tenant {}", tenant_id),
-            )))
-        })?;
+    ) -> Result<deadpool_postgres::Object, deadpool_postgres::PoolError> {
+        let pool = self
+            .get_pool(tenant_id)
+            .ok_or(deadpool_postgres::PoolError::Closed)?;
 
         match pool.get().await {
             Ok(conn) => Ok(conn),
