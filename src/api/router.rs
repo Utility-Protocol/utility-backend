@@ -21,6 +21,10 @@ pub async fn build_router() -> anyhow::Result<Router> {
             "/api/v1/time-series/diagnostics/:meter_id",
             get(handlers::get_diagnostics),
         )
+        .route(
+            "/api/v1/calibrate/:meter_id",
+            post(handlers::calibrate_meter),
+        )
         .route("/api/v1/meters/register", post(handlers::register_meter))
         .route("/api/v1/meters/rotate-key", post(handlers::rotate_key))
         .route("/metrics", get(handlers::metrics_handler))

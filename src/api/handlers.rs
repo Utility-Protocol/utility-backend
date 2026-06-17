@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::gateway::crypto::global_registry;
 use crate::time_series::analytics::{global_engine, DiagnosticReport};
+use crate::time_series::drift::CalibrationResult;
 
 #[derive(Serialize)]
 pub struct MeterInfo {
@@ -96,6 +97,17 @@ pub struct RegisterMeterRequest {
 pub struct RegisterMeterResponse {
     pub meter_id: String,
     pub status: String,
+}
+
+pub async fn calibrate_meter(
+    Path(meter_id): Path<String>,
+) -> Result<Json<CalibrationResult>, StatusCode> {
+    let worker = crate::time_series::drift::global_drift_worker().await;
+    worker
+        .recalibrate_meter(meter_id)
+        .await
+        .map(Json)
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)
 }
 
 pub async fn register_meter(
