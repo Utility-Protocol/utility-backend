@@ -1,6 +1,6 @@
 use crate::api::metrics::GC_PAUSE_SECONDS;
 use std::alloc::{GlobalAlloc, Layout, System};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 static ALLOC_ENABLED: AtomicBool = AtomicBool::new(true);

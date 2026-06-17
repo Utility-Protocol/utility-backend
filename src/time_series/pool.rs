@@ -1,7 +1,6 @@
 use crate::api::metrics;
 use deadpool_postgres::tokio_postgres::NoTls;
 use deadpool_postgres::{Config, ManagerConfig, Pool, RecyclingMethod, Runtime};
-use std::time::Duration;
 use tracing::info;
 
 pub struct TenantPool {
@@ -56,17 +55,11 @@ impl MultiTenantPoolManager {
             )))
         })?;
 
-        match tokio::time::timeout(Duration::from_secs(5), pool.get()).await {
-            Ok(Ok(conn)) => Ok(conn),
-            Ok(Err(e)) => {
+        match pool.get().await {
+            Ok(conn) => Ok(conn),
+            Err(e) => {
                 metrics::record_db_starvation();
                 Err(e)
-            }
-            Err(_) => {
-                metrics::record_db_starvation();
-                Err(deadpool_postgres::PoolError::Timeout(
-                    "connection acquisition timed out".into(),
-                ))
             }
         }
     }
