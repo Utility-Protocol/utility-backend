@@ -1,16 +1,10 @@
 use crate::api::metrics::GC_PAUSE_SECONDS;
 use std::alloc::{GlobalAlloc, Layout, System};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::cell::Cell;
 use std::time::Instant;
 
-static ALLOC_ENABLED: AtomicBool = AtomicBool::new(true);
-
-pub fn pause_alloc_tracking() {
-    ALLOC_ENABLED.store(false, Ordering::SeqCst);
-}
-
-pub fn resume_alloc_tracking() {
-    ALLOC_ENABLED.store(true, Ordering::SeqCst);
+thread_local! {
+    static ALLOC_TRACKING: Cell<bool> = const { Cell::new(true) };
 }
 
 pub struct TrackingAllocator;
@@ -20,9 +14,13 @@ unsafe impl GlobalAlloc for TrackingAllocator {
         let start = Instant::now();
         let ptr = System.alloc(layout);
         let elapsed = start.elapsed().as_secs_f64();
-        if ALLOC_ENABLED.load(Ordering::Relaxed) {
-            GC_PAUSE_SECONDS.add(elapsed);
-        }
+        ALLOC_TRACKING.with(|tracking| {
+            if tracking.get() {
+                tracking.set(false);
+                GC_PAUSE_SECONDS.add(elapsed);
+                tracking.set(true);
+            }
+        });
         ptr
     }
 
@@ -30,18 +28,26 @@ unsafe impl GlobalAlloc for TrackingAllocator {
         let start = Instant::now();
         System.dealloc(ptr, layout);
         let elapsed = start.elapsed().as_secs_f64();
-        if ALLOC_ENABLED.load(Ordering::Relaxed) {
-            GC_PAUSE_SECONDS.add(elapsed);
-        }
+        ALLOC_TRACKING.with(|tracking| {
+            if tracking.get() {
+                tracking.set(false);
+                GC_PAUSE_SECONDS.add(elapsed);
+                tracking.set(true);
+            }
+        });
     }
 
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
         let start = Instant::now();
         let ptr = System.alloc_zeroed(layout);
         let elapsed = start.elapsed().as_secs_f64();
-        if ALLOC_ENABLED.load(Ordering::Relaxed) {
-            GC_PAUSE_SECONDS.add(elapsed);
-        }
+        ALLOC_TRACKING.with(|tracking| {
+            if tracking.get() {
+                tracking.set(false);
+                GC_PAUSE_SECONDS.add(elapsed);
+                tracking.set(true);
+            }
+        });
         ptr
     }
 
@@ -49,9 +55,13 @@ unsafe impl GlobalAlloc for TrackingAllocator {
         let start = Instant::now();
         let new_ptr = System.realloc(ptr, layout, new_size);
         let elapsed = start.elapsed().as_secs_f64();
-        if ALLOC_ENABLED.load(Ordering::Relaxed) {
-            GC_PAUSE_SECONDS.add(elapsed);
-        }
+        ALLOC_TRACKING.with(|tracking| {
+            if tracking.get() {
+                tracking.set(false);
+                GC_PAUSE_SECONDS.add(elapsed);
+                tracking.set(true);
+            }
+        });
         new_ptr
     }
 }
