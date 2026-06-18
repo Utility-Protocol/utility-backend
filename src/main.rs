@@ -1,5 +1,8 @@
 use std::net::SocketAddr;
+use std::sync::Arc;
 use tracing_subscriber::EnvFilter;
+
+use utility_backend::soroban::sequencer::NonceSequencer;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -9,7 +12,13 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("starting utility-backend service");
 
-    let app = utility_backend::api::router::build_router().await?;
+    let sequencer = Arc::new(NonceSequencer::new());
+    let reaper = sequencer.clone();
+    tokio::spawn(async move {
+        reaper.start_reaper().await;
+    });
+
+    let app = utility_backend::api::router::build_router(sequencer).await?;
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 8443));
     tracing::info!("listening on {}", addr);
