@@ -82,7 +82,7 @@ pub async fn nonce_status() -> Json<NonceStatus> {
     Json(global_sequencer().status())
 }
 
-pub async fn metrics_handler() -> &'static str {
+pub async fn metrics_handler() -> impl IntoResponse {
     use prometheus::TextEncoder;
     let encoder = TextEncoder::new();
     let metric_families = prometheus::gather();

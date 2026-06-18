@@ -1,8 +1,8 @@
+use dashmap::DashMap;
+use serde::Serialize;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use dashmap::DashMap;
-use serde::Serialize;
 use tracing::{debug, info};
 
 const NONCE_BLOCK_SIZE: u64 = 100;
@@ -83,7 +83,9 @@ impl NonceSequencer {
             let new_base = self
                 .global_allocator
                 .fetch_add(NONCE_BLOCK_SIZE, Ordering::SeqCst);
-            entry.end.store(new_base + NONCE_BLOCK_SIZE, Ordering::Release);
+            entry
+                .end
+                .store(new_base + NONCE_BLOCK_SIZE, Ordering::Release);
             entry.next.store(new_base + 1, Ordering::Release);
             info!(
                 grid = %grid_id,
@@ -148,7 +150,10 @@ impl NonceSequencer {
                     std::thread::sleep(REAP_INTERVAL);
                     let count = reap_stale(&grids, &last_committed);
                     if count > 0 {
-                        info!(stale_count = count, "nonce reaper cleaned stale grid entries");
+                        info!(
+                            stale_count = count,
+                            "nonce reaper cleaned stale grid entries"
+                        );
                     }
                 }
             });
@@ -197,7 +202,10 @@ mod tests {
         let n1 = seq.next_nonce("grid-east");
         let n2 = seq.next_nonce("grid-east");
         let n3 = seq.next_nonce("grid-west");
-        assert!(n1 < n2, "nonces for same grid must be monotonically increasing");
+        assert!(
+            n1 < n2,
+            "nonces for same grid must be monotonically increasing"
+        );
         assert_ne!(n1, n3, "nonces for different grids must not be equal");
     }
 
@@ -262,7 +270,8 @@ mod tests {
             assert!(
                 nonces.windows(2).all(|w| w[0] <= w[1]),
                 "grid-{} nonces must be monotonically increasing: {:?}",
-                g, nonces
+                g,
+                nonces
             );
             let unique: HashSet<u64> = nonces.iter().copied().collect();
             assert_eq!(
@@ -313,7 +322,11 @@ mod tests {
 
         assert_eq!(all_nonces.len(), concurrent_tasks * ops_per_task);
         let unique: HashSet<u64> = all_nonces.iter().copied().collect();
-        assert_eq!(unique.len(), all_nonces.len(), "duplicate nonces detected under concurrent block exhaustion stress");
+        assert_eq!(
+            unique.len(),
+            all_nonces.len(),
+            "duplicate nonces detected under concurrent block exhaustion stress"
+        );
     }
 
     #[test]
@@ -345,10 +358,18 @@ mod tests {
         let status = seq.status();
         assert_eq!(status.grids.len(), 2);
 
-        let alpha = status.grids.iter().find(|g| g.grid_id == "grid-alpha").unwrap();
+        let alpha = status
+            .grids
+            .iter()
+            .find(|g| g.grid_id == "grid-alpha")
+            .unwrap();
         assert_eq!(alpha.high_water_mark, 1);
 
-        let beta = status.grids.iter().find(|g| g.grid_id == "grid-beta").unwrap();
+        let beta = status
+            .grids
+            .iter()
+            .find(|g| g.grid_id == "grid-beta")
+            .unwrap();
         assert_eq!(beta.high_water_mark, 100);
     }
 
@@ -377,7 +398,10 @@ mod tests {
 
         use proptest::collection;
 
-        let strategy = (collection::vec("[a-z]{1,8}", 20..=20), collection::vec(1..10u64, 20));
+        let strategy = (
+            collection::vec("[a-z]{1,8}", 20..=20),
+            collection::vec(1..10u64, 20),
+        );
 
         runner
             .run(&strategy, |(grid_ids, operations)| {
