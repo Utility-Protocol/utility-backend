@@ -1,4 +1,6 @@
-use axum::{extract::Path, extract::State, Json};
+use axum::{extract::Path, extract::State, http::StatusCode, response::IntoResponse, Json};
+use ed25519_dalek::VerifyingKey;
+use hex;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -44,7 +46,10 @@ pub async fn nonce_status(
     let marks = sequencer.get_all_grid_high_water_marks();
     let statuses: Vec<GridNonceStatus> = marks
         .into_iter()
-        .map(|(grid_id, hwm)| GridNonceStatus { grid_id, high_water_mark: hwm })
+        .map(|(grid_id, hwm)| GridNonceStatus {
+            grid_id,
+            high_water_mark: hwm,
+        })
         .collect();
     Json(statuses)
 }

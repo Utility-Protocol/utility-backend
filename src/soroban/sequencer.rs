@@ -1,8 +1,8 @@
+use dashmap::DashMap;
+use parking_lot::Mutex as StdMutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use dashmap::DashMap;
-use parking_lot::Mutex as StdMutex;
 use tracing::info;
 
 const NONCE_BLOCK_SIZE: u64 = 100;
@@ -42,17 +42,14 @@ impl NonceSequencer {
     }
 
     fn get_or_create_grid(&self, grid_id: &str) -> Arc<GridNonceState> {
-        let entry = self
-            .grids
-            .entry(grid_id.to_string())
-            .or_insert_with(|| {
-                Arc::new(GridNonceState {
-                    current: AtomicU64::new(0),
-                    reserved_until: AtomicU64::new(0),
-                    last_activity: AtomicU64::new(current_time_secs()),
-                    reservation_lock: StdMutex::new(()),
-                })
-            });
+        let entry = self.grids.entry(grid_id.to_string()).or_insert_with(|| {
+            Arc::new(GridNonceState {
+                current: AtomicU64::new(0),
+                reserved_until: AtomicU64::new(0),
+                last_activity: AtomicU64::new(current_time_secs()),
+                reservation_lock: StdMutex::new(()),
+            })
+        });
         entry.value().clone()
     }
 
