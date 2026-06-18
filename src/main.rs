@@ -18,6 +18,9 @@ async fn main() -> anyhow::Result<()> {
     tokio::spawn(async move {
         reaper.start_reaper().await;
     });
+    tokio::spawn(async {
+        db_active_connection_poller().await;
+    });
 
     let app = utility_backend::api::router::build_router(sequencer).await?;
 
