@@ -1,3 +1,4 @@
+use crate::api::metrics;
 use deadpool_postgres::tokio_postgres::NoTls;
 use deadpool_postgres::{Config, ManagerConfig, Pool, RecyclingMethod, Runtime};
 use tracing::info;
@@ -38,5 +39,26 @@ impl MultiTenantPoolManager {
             .iter()
             .find(|t| t.tenant_id == tenant_id)
             .map(|t| &t.pool)
+    }
+
+    pub async fn get_connection(
+        &self,
+        tenant_id: &str,
+    ) -> Result<deadpool_postgres::Object, deadpool_postgres::PoolError> {
+        let pool = self
+            .get_pool(tenant_id)
+            .ok_or(deadpool_postgres::PoolError::Closed)?;
+
+        match pool.get().await {
+            Ok(conn) => Ok(conn),
+            Err(e) => {
+                metrics::record_db_starvation();
+                Err(e)
+            }
+        }
+    }
+
+    pub fn pools(&self) -> &[TenantPool] {
+        &self.pools
     }
 }

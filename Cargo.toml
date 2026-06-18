@@ -43,6 +43,7 @@ fixed = "1.23"
 async-trait = "0.1"
 backoff = { version = "0.4", features = ["tokio"] }
 tokio-stream = "0.1"
+lru = "0.12"
 criterion = { version = "0.5", optional = true }
 
 [dev-dependencies]

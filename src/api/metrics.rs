@@ -6,7 +6,7 @@ use prometheus::{
 lazy_static! {
     pub static ref GC_PAUSE_SECONDS: Gauge = register_gauge!(
         "utility_gc_pause_seconds",
-        "Cumulative GC pause time in seconds"
+        "Cumulative allocator pause time in seconds"
     )
     .unwrap();
     pub static ref DB_POOL_STARVATION: Gauge = register_gauge!(
@@ -31,6 +31,21 @@ lazy_static! {
         "Number of currently active gateway connections"
     )
     .unwrap();
+    pub static ref DB_ACTIVE_CONNECTIONS: Gauge = register_gauge!(
+        "utility_db_active_connections",
+        "Number of active database connections from pg_stat_activity"
+    )
+    .unwrap();
+    pub static ref DB_IDLE_CONNECTIONS: Gauge = register_gauge!(
+        "utility_db_idle_connections",
+        "Number of idle database connections"
+    )
+    .unwrap();
+    pub static ref DB_WAITING_REQUESTS: Gauge = register_gauge!(
+        "utility_db_waiting_requests",
+        "Number of waiting database requests"
+    )
+    .unwrap();
 }
 
 pub fn record_ingestion(meter_id: &str, status: &str) {
@@ -39,4 +54,26 @@ pub fn record_ingestion(meter_id: &str, status: &str) {
 
 pub fn record_db_starvation() {
     DB_POOL_STARVATION.inc();
+}
+
+pub fn record_rpc_latency(method: &str, latency_seconds: f64) {
+    RPC_LATENCY
+        .with_label_values(&[method])
+        .observe(latency_seconds);
+}
+
+pub fn set_db_active_connections(count: f64) {
+    DB_ACTIVE_CONNECTIONS.set(count);
+}
+
+pub fn set_db_idle_connections(count: f64) {
+    DB_IDLE_CONNECTIONS.set(count);
+}
+
+pub fn set_db_waiting_requests(count: f64) {
+    DB_WAITING_REQUESTS.set(count);
+}
+
+pub fn get_starvation_count() -> f64 {
+    DB_POOL_STARVATION.get()
 }

@@ -47,12 +47,17 @@ fn test_crypto_verify_hardware_meter() {
     use ed25519_dalek::{Signer, SigningKey};
     use rand::rngs::OsRng;
 
+    use utility_backend::gateway::crypto::MeterStatus;
+
     let mut csprng = OsRng;
     let signing_key = SigningKey::generate(&mut csprng);
     let verifying_key = signing_key.verifying_key();
     let identity = MeterIdentity {
         meter_id: "MTR-HW-99".into(),
         public_key: verifying_key,
+        status: MeterStatus::Active,
+        enrolled_at: 1000,
+        key_rotated_at: 1000,
     };
     let payload = b"flow_rate:15.7;pressure:42.3";
     let signature = signing_key.sign(payload);
