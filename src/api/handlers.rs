@@ -1,8 +1,9 @@
-use axum::{extract::Path, http::StatusCode, Json};
+use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
 use ed25519_dalek::VerifyingKey;
 use hex;
 use serde::{Deserialize, Serialize};
 
+use crate::api::metrics;
 use crate::gateway::crypto::global_registry;
 use crate::time_series::analytics::{global_engine, DiagnosticReport};
 use crate::time_series::drift::CalibrationResult;
@@ -76,13 +77,26 @@ pub async fn get_diagnostics(
         .ok_or(StatusCode::NOT_FOUND)
 }
 
-pub async fn metrics_handler() -> &'static str {
+pub async fn metrics_handler() -> impl IntoResponse {
     use prometheus::TextEncoder;
     let encoder = TextEncoder::new();
     let metric_families = prometheus::gather();
     let mut buffer = String::new();
     encoder.encode_utf8(&metric_families, &mut buffer).unwrap();
-    Box::leak(buffer.into_boxed_str())
+    let headers = [(
+        axum::http::header::CONTENT_TYPE,
+        "text/plain; version=0.0.4",
+    )];
+    (headers, buffer)
+}
+
+pub async fn readyz_handler() -> StatusCode {
+    let starvation = metrics::get_starvation_count();
+    if starvation > 100.0 {
+        StatusCode::SERVICE_UNAVAILABLE
+    } else {
+        StatusCode::OK
+    }
 }
 
 #[derive(Deserialize)]
