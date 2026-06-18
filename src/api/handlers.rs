@@ -1,11 +1,13 @@
-use axum::{extract::Path, http::StatusCode, Json};
+use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
 use ed25519_dalek::VerifyingKey;
 use hex;
 use serde::{Deserialize, Serialize};
 
+use crate::api::metrics;
 use crate::gateway::crypto::global_registry;
 use crate::soroban::sequencer::{global_sequencer, NonceStatus};
 use crate::time_series::analytics::{global_engine, DiagnosticReport};
+use crate::time_series::drift::CalibrationResult;
 
 #[derive(Serialize)]
 pub struct MeterInfo {
@@ -86,7 +88,20 @@ pub async fn metrics_handler() -> &'static str {
     let metric_families = prometheus::gather();
     let mut buffer = String::new();
     encoder.encode_utf8(&metric_families, &mut buffer).unwrap();
-    Box::leak(buffer.into_boxed_str())
+    let headers = [(
+        axum::http::header::CONTENT_TYPE,
+        "text/plain; version=0.0.4",
+    )];
+    (headers, buffer)
+}
+
+pub async fn readyz_handler() -> StatusCode {
+    let starvation = metrics::get_starvation_count();
+    if starvation > 100.0 {
+        StatusCode::SERVICE_UNAVAILABLE
+    } else {
+        StatusCode::OK
+    }
 }
 
 #[derive(Deserialize)]
@@ -101,6 +116,17 @@ pub struct RegisterMeterRequest {
 pub struct RegisterMeterResponse {
     pub meter_id: String,
     pub status: String,
+}
+
+pub async fn calibrate_meter(
+    Path(meter_id): Path<String>,
+) -> Result<Json<CalibrationResult>, StatusCode> {
+    let worker = crate::time_series::drift::global_drift_worker().await;
+    worker
+        .recalibrate_meter(meter_id)
+        .await
+        .map(Json)
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)
 }
 
 pub async fn register_meter(
