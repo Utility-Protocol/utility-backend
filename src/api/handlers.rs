@@ -1,11 +1,13 @@
-use axum::{extract::Path, http::StatusCode, response::IntoResponse, Json};
+use axum::{extract::Path, extract::State, http::StatusCode, response::IntoResponse, Json};
 use ed25519_dalek::VerifyingKey;
 use hex;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+
+use crate::soroban::sequencer::NonceSequencer;
 
 use crate::api::metrics;
 use crate::gateway::crypto::global_registry;
-use crate::soroban::sequencer::{global_sequencer, NonceStatus};
 use crate::time_series::analytics::{global_engine, DiagnosticReport};
 use crate::time_series::drift::CalibrationResult;
 
@@ -30,6 +32,26 @@ pub struct SettlementRequest {
     pub meter_id: String,
     pub resource_units: f64,
     pub destination_wallet: String,
+}
+
+#[derive(Serialize)]
+pub struct GridNonceStatus {
+    pub grid_id: String,
+    pub high_water_mark: u64,
+}
+
+pub async fn nonce_status(
+    State(sequencer): State<Arc<NonceSequencer>>,
+) -> Json<Vec<GridNonceStatus>> {
+    let marks = sequencer.get_all_grid_high_water_marks();
+    let statuses: Vec<GridNonceStatus> = marks
+        .into_iter()
+        .map(|(grid_id, hwm)| GridNonceStatus {
+            grid_id,
+            high_water_mark: hwm,
+        })
+        .collect();
+    Json(statuses)
 }
 
 pub async fn list_meters() -> Json<Vec<MeterInfo>> {
@@ -76,10 +98,6 @@ pub async fn get_diagnostics(
         .get_diagnostics(&meter_id)
         .map(Json)
         .ok_or(StatusCode::NOT_FOUND)
-}
-
-pub async fn nonce_status() -> Json<NonceStatus> {
-    Json(global_sequencer().status())
 }
 
 pub async fn metrics_handler() -> impl IntoResponse {
