@@ -59,4 +59,8 @@ default = []
 name = "utility_backend"
 path = "src/lib.rs"
 
+[[bench]]
+name = "parser_bench"
+harness = false
+
 
