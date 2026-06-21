@@ -39,7 +39,7 @@ rustls = "0.22"
 rustls-pemfile = "2"
 x509-parser = "0.16"
 tokio-rustls = "0.25"
-fixed = "1.23"
+fixed = { version = "1.23", features = ["serde"] }
 async-trait = "0.1"
 backoff = { version = "0.4", features = ["tokio"] }
 tokio-stream = "0.1"
