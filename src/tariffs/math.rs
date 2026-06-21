@@ -155,7 +155,7 @@ fn validate_f64_for_fixed(amount: f64) -> Result<(), &'static str> {
     if amount.is_infinite() {
         return Err("invalid float: infinite");
     }
-    if amount > I64F64_MAX_F64 || amount < I64F64_MIN_F64 {
+    if !(I64F64_MIN_F64..=I64F64_MAX_F64).contains(&amount) {
         return Err("overflow: value outside I64F64 representable range");
     }
     Ok(())
@@ -426,16 +426,18 @@ mod tests {
     #[test]
     fn round_half_up_non_tie() {
         // 2.3 → 2, 2.7 → 3
-        assert!((apply_rounding(I64F64::from_num(2.3), RoundingMode::RoundHalfUp)
-            .to_num::<f64>()
-            - 2.0)
-            .abs()
-            < 0.0001);
-        assert!((apply_rounding(I64F64::from_num(2.7), RoundingMode::RoundHalfUp)
-            .to_num::<f64>()
-            - 3.0)
-            .abs()
-            < 0.0001);
+        assert!(
+            (apply_rounding(I64F64::from_num(2.3), RoundingMode::RoundHalfUp).to_num::<f64>()
+                - 2.0)
+                .abs()
+                < 0.0001
+        );
+        assert!(
+            (apply_rounding(I64F64::from_num(2.7), RoundingMode::RoundHalfUp).to_num::<f64>()
+                - 3.0)
+                .abs()
+                < 0.0001
+        );
     }
 
     #[test]
@@ -479,16 +481,16 @@ mod tests {
     #[test]
     fn bankers_mode_non_tie() {
         // 2.3 → 2, 2.7 → 3
-        assert!((apply_rounding(I64F64::from_num(2.3), RoundingMode::Bankers)
-            .to_num::<f64>()
-            - 2.0)
-            .abs()
-            < 0.0001);
-        assert!((apply_rounding(I64F64::from_num(2.7), RoundingMode::Bankers)
-            .to_num::<f64>()
-            - 3.0)
-            .abs()
-            < 0.0001);
+        assert!(
+            (apply_rounding(I64F64::from_num(2.3), RoundingMode::Bankers).to_num::<f64>() - 2.0)
+                .abs()
+                < 0.0001
+        );
+        assert!(
+            (apply_rounding(I64F64::from_num(2.7), RoundingMode::Bankers).to_num::<f64>() - 3.0)
+                .abs()
+                < 0.0001
+        );
     }
 
     #[test]
