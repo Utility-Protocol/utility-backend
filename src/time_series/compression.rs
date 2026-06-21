@@ -177,8 +177,7 @@ impl CompressionPolicyManager {
             .filter_map(|c| c.lag_days)
             .fold(0.0_f64, f64::max);
 
-        let alert_fired =
-            compression_lag_max_days > self.policy.max_compression_lag_days as f64;
+        let alert_fired = compression_lag_max_days > self.policy.max_compression_lag_days as f64;
         self.alert_fired.store(alert_fired, Ordering::Relaxed);
 
         if alert_fired {
@@ -211,7 +210,7 @@ impl CompressionPolicyManager {
             .into_iter()
             .filter(|c| !c.is_compressed)
             .collect();
-        pending.sort_by(|a, b| a.range_start.cmp(&b.range_start));
+        pending.sort_by_key(|a| a.range_start);
         Ok(pending)
     }
 
@@ -223,8 +222,7 @@ impl CompressionPolicyManager {
         &self,
     ) -> Result<Vec<ChunkCompressionState>, Box<dyn std::error::Error>> {
         let status = self.get_compression_status().await?;
-        let cutoff = Utc::now()
-            - chrono::Duration::days(self.policy.compress_after_days as i64);
+        let cutoff = Utc::now() - chrono::Duration::days(self.policy.compress_after_days as i64);
 
         let candidates: Vec<_> = status
             .chunks
@@ -272,10 +270,7 @@ impl CompressionPolicyManager {
 // ---------------------------------------------------------------------------
 
 /// Spawns a background task that monitors compression lag and fires alerts.
-pub fn spawn_compression_monitor(
-    manager: Arc<CompressionPolicyManager>,
-    check_interval: Duration,
-) {
+pub fn spawn_compression_monitor(manager: Arc<CompressionPolicyManager>, check_interval: Duration) {
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(check_interval);
         interval.tick().await; // skip immediate first tick
@@ -370,36 +365,31 @@ mod tests {
 
     #[test]
     fn test_dynamic_interval_spike() {
-        let interval =
-            CompressionPolicyManager::compute_dynamic_interval(10_000.0, 1_000.0, 4);
+        let interval = CompressionPolicyManager::compute_dynamic_interval(10_000.0, 1_000.0, 4);
         assert_eq!(interval, 2); // halved from 4 → 2
     }
 
     #[test]
     fn test_dynamic_interval_low_volume() {
-        let interval =
-            CompressionPolicyManager::compute_dynamic_interval(100.0, 1_000.0, 4);
+        let interval = CompressionPolicyManager::compute_dynamic_interval(100.0, 1_000.0, 4);
         assert_eq!(interval, 7); // doubled from 4 → 8, capped at 7
     }
 
     #[test]
     fn test_dynamic_interval_normal() {
-        let interval =
-            CompressionPolicyManager::compute_dynamic_interval(1_000.0, 1_000.0, 4);
+        let interval = CompressionPolicyManager::compute_dynamic_interval(1_000.0, 1_000.0, 4);
         assert_eq!(interval, 4); // unchanged
     }
 
     #[test]
     fn test_dynamic_interval_zero_baseline_fallback() {
-        let interval =
-            CompressionPolicyManager::compute_dynamic_interval(1_000.0, 0.0, 4);
+        let interval = CompressionPolicyManager::compute_dynamic_interval(1_000.0, 0.0, 4);
         assert_eq!(interval, 4); // fallback to base
     }
 
     #[test]
     fn test_dynamic_interval_clamps_min() {
-        let interval =
-            CompressionPolicyManager::compute_dynamic_interval(1_000_000.0, 1.0, 2);
+        let interval = CompressionPolicyManager::compute_dynamic_interval(1_000_000.0, 1.0, 2);
         assert_eq!(interval, 1); // min 1 day
     }
 
@@ -481,8 +471,7 @@ mod tests {
 
     #[test]
     fn test_dynamic_interval_boundary() {
-        let interval =
-            CompressionPolicyManager::compute_dynamic_interval(1_500.0, 1_000.0, 4);
+        let interval = CompressionPolicyManager::compute_dynamic_interval(1_500.0, 1_000.0, 4);
         assert_eq!(interval, 4); // 1.5 not > 1.5, so normal
     }
 }
