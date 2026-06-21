@@ -4,6 +4,10 @@ use std::time::Duration;
 use tracing_subscriber::EnvFilter;
 
 use utility_backend::soroban::sequencer::NonceSequencer;
+use utility_backend::time_series::compression::{
+    init_global_compression_manager, spawn_compression_monitor, CompressionPolicy,
+    CompressionPolicyManager,
+};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -21,6 +25,17 @@ async fn main() -> anyhow::Result<()> {
     tokio::spawn(async {
         db_active_connection_poller().await;
     });
+
+    // Initialise the global compression policy manager and spawn its
+    // background monitoring task.
+    let db_url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://utility:utility_secret@localhost:5432/utility_test".into());
+    let compression_manager = Arc::new(CompressionPolicyManager::new(
+        db_url,
+        CompressionPolicy::default(),
+    ));
+    init_global_compression_manager(compression_manager.clone());
+    spawn_compression_monitor(compression_manager, Duration::from_secs(60));
 
     let app = utility_backend::api::router::build_router(sequencer).await?;
 

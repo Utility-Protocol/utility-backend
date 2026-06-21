@@ -34,6 +34,10 @@ pub async fn build_router(sequencer: Arc<NonceSequencer>) -> anyhow::Result<Rout
         .route("/api/v1/nonce/status", get(handlers::nonce_status))
         .route("/metrics", get(handlers::metrics_handler))
         .route("/api/v1/nonce/status", get(handlers::nonce_status))
+        .route(
+            "/api/v1/database/compression/status",
+            get(handlers::compression_status),
+        )
         .layer(axum_mw::from_fn(crate::api::middleware::rate_limit_layer))
         .layer(cors)
         .with_state(sequencer);

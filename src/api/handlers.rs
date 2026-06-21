@@ -9,6 +9,7 @@ use crate::soroban::sequencer::NonceSequencer;
 use crate::api::metrics;
 use crate::gateway::crypto::global_registry;
 use crate::time_series::analytics::{global_engine, DiagnosticReport};
+use crate::time_series::compression::CompressionStatus;
 use crate::time_series::drift::CalibrationResult;
 
 #[derive(Serialize)]
@@ -134,6 +135,30 @@ pub struct RegisterMeterRequest {
 pub struct RegisterMeterResponse {
     pub meter_id: String,
     pub status: String,
+}
+
+pub async fn compression_status() -> Result<Json<CompressionStatus>, StatusCode> {
+    if let Some(manager) = crate::time_series::compression::global_compression_manager() {
+        match manager.get_compression_status().await {
+            Ok(status) => Ok(Json(status)),
+            Err(e) => {
+                tracing::warn!(error = %e, "compression status query failed");
+                Err(StatusCode::INTERNAL_SERVER_ERROR)
+            }
+        }
+    } else {
+        // Fallback: return default-initialised status when no database is configured.
+        Ok(Json(CompressionStatus {
+            hypertable_name: "meter_readings".into(),
+            total_chunks: 0,
+            compressed_chunks: 0,
+            uncompressed_chunks: 0,
+            chunks: vec![],
+            dry_run: false,
+            compression_lag_max_days: 0.0,
+            alert_fired: false,
+        }))
+    }
 }
 
 pub async fn calibrate_meter(
