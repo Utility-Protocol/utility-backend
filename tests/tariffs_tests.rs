@@ -1,6 +1,6 @@
 use fixed::types::I64F64;
 use utility_backend::tariffs::engine::{TariffEngine, TariffSchedule, TariffTier};
-use utility_backend::tariffs::math::convert_units;
+use utility_backend::tariffs::math::{convert_units, RoundingMode};
 
 #[test]
 fn test_tariff_peak_vs_offpeak() {
@@ -38,6 +38,6 @@ fn test_tariff_peak_vs_offpeak() {
 #[test]
 fn test_unit_conversion() {
     let val = I64F64::from_num(1000);
-    let result = convert_units(val, "kWh", "MWh").unwrap();
+    let result = convert_units(val, "kWh", "MWh", RoundingMode::RoundHalfUp).unwrap();
     assert!((result.to_num::<f64>() - 1.0).abs() < 0.0001);
 }
