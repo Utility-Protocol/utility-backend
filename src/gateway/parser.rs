@@ -20,8 +20,8 @@ pub fn parse_envelope(data: &[u8]) -> Result<CompressedEnvelope<'_>, &'static st
     if data.len() < 2 + meter_id_len + 32 {
         return Err("malformed envelope: meter_id truncated");
     }
-    let meter_id = str::from_utf8(&data[2..2 + meter_id_len])
-        .map_err(|_| "invalid utf-8 meter_id")?;
+    let meter_id =
+        str::from_utf8(&data[2..2 + meter_id_len]).map_err(|_| "invalid utf-8 meter_id")?;
     let payload_start = 2 + meter_id_len;
     let payload_end = data.len() - 32;
     let payload = &data[payload_start..payload_end];
