@@ -40,16 +40,29 @@ impl CircuitBreaker {
             .json(&payload)
             .send()
             .await
-            .map_err(|_| "rpc request failed")?;
+            .map_err(|_| {
+                self.record_failure();
+                "rpc request failed"
+            })?;
 
         let body: SorobanRpcResponse = resp
             .json()
             .await
-            .map_err(|_| "failed to parse rpc response")?;
+            .map_err(|_| {
+                self.record_failure();
+                "failed to parse rpc response"
+            })?;
 
         self.failure_count = 0;
         self.is_open = false;
         info!("soroban rpc call succeeded");
         Ok(body)
+    }
+
+    fn record_failure(&mut self) {
+        self.failure_count += 1;
+        if self.failure_count >= self.max_failures {
+            self.is_open = true;
+        }
     }
 }
