@@ -159,3 +159,60 @@ fn test_global_engine_is_accessible() {
     let report = guard.get_diagnostics("GLOBAL");
     assert!(report.is_some());
 }
+
+#[tokio::test]
+#[ignore] // Requires a running PostgreSQL/TimescaleDB instance
+async fn test_concurrent_telemetry_ingestion_ordering() {
+    let database_url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://utility:utility_secret@localhost:5432/utility_test".into());
+    let pool = sqlx::PgPool::connect(&database_url).await.unwrap();
+
+    // Clean up before test
+    sqlx::query("DELETE FROM telemetry_events WHERE meter_id = 'CONCURRENT-MTR'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let meter_id = "CONCURRENT-MTR";
+    let num_concurrent = 10;
+    let mut handles = vec![];
+
+    for i in 0..num_concurrent {
+        let p = pool.clone();
+        let mid = meter_id.to_string();
+        handles.push(tokio::spawn(async move {
+            utility_backend::time_series::ingestion::ingest_telemetry(
+                &p,
+                &mid,
+                100.0 + (i as f64),
+                chrono::Utc::now(),
+            )
+            .await
+        }));
+    }
+
+    let mut sequences = vec![];
+    for h in handles {
+        let seq = h.await.unwrap().unwrap();
+        sequences.push(seq);
+    }
+
+    sequences.sort();
+
+    // Verify that we have unique, dense sequences from 1 to 10
+    assert_eq!(sequences.len(), num_concurrent);
+    for (i, &seq) in sequences.iter().enumerate() {
+        assert_eq!(seq, (i + 1) as i32, "Sequence mismatch at index {}", i);
+    }
+
+    // Double check the database content
+    let db_sequences: Vec<i32> = sqlx::query_scalar(
+        "SELECT sequence FROM telemetry_events WHERE meter_id = $1 ORDER BY sequence ASC"
+    )
+    .bind(meter_id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(db_sequences, sequences);
+}
