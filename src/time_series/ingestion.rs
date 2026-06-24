@@ -1,7 +1,7 @@
-use sqlx::{Pool, Postgres};
 use chrono::{DateTime, Utc};
+use sha2::{Digest, Sha256};
+use sqlx::{Pool, Postgres};
 use tracing::info;
-use sha2::{Sha256, Digest};
 
 /// Ingests a telemetry reading into the database, ensuring strictly monotonic
 /// sequences per meter even under high concurrency.
@@ -33,7 +33,7 @@ pub async fn ingest_telemetry(
     // Because we hold the advisory lock, no other transaction can be
     // computing the next sequence for this meter_id simultaneously.
     let next_seq: i32 = sqlx::query_scalar(
-        "SELECT COALESCE(MAX(sequence), 0) + 1 FROM telemetry_events WHERE meter_id = $1"
+        "SELECT COALESCE(MAX(sequence), 0) + 1 FROM telemetry_events WHERE meter_id = $1",
     )
     .bind(meter_id)
     .fetch_one(&mut *tx)

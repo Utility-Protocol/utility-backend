@@ -1,7 +1,7 @@
-use std::sync::Arc;
-use sqlx::{Pool, Postgres};
-use axum::extract::FromRef;
 use crate::soroban::sequencer::NonceSequencer;
+use axum::extract::FromRef;
+use sqlx::{Pool, Postgres};
+use std::sync::Arc;
 
 pub mod alloc_tracker;
 pub mod handlers;

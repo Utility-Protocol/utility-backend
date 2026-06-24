@@ -2,12 +2,12 @@ use axum::{extract::Path, extract::State, http::StatusCode, response::IntoRespon
 use ed25519_dalek::VerifyingKey;
 use hex;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use sqlx::{Pool, Postgres};
+use std::sync::Arc;
 
-use crate::soroban::sequencer::NonceSequencer;
 use crate::api::metrics;
 use crate::gateway::crypto::global_registry;
+use crate::soroban::sequencer::NonceSequencer;
 use crate::time_series::analytics::{global_engine, DiagnosticReport};
 use crate::time_series::compression::CompressionStatus;
 use crate::time_series::drift::CalibrationResult;

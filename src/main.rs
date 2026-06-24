@@ -43,10 +43,7 @@ async fn main() -> anyhow::Result<()> {
     init_global_compression_manager(compression_manager.clone());
     spawn_compression_monitor(compression_manager, Duration::from_secs(60));
 
-    let state = AppState {
-        sequencer,
-        db_pool,
-    };
+    let state = AppState { sequencer, db_pool };
 
     let app = utility_backend::api::router::build_router(state).await?;
 

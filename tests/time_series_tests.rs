@@ -207,7 +207,7 @@ async fn test_concurrent_telemetry_ingestion_ordering() {
 
     // Double check the database content
     let db_sequences: Vec<i32> = sqlx::query_scalar(
-        "SELECT sequence FROM telemetry_events WHERE meter_id = $1 ORDER BY sequence ASC"
+        "SELECT sequence FROM telemetry_events WHERE meter_id = $1 ORDER BY sequence ASC",
     )
     .bind(meter_id)
     .fetch_all(&pool)
