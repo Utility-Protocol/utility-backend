@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tracing_subscriber::EnvFilter;
 
+use utility_backend::api::AppState;
 use utility_backend::soroban::sequencer::NonceSequencer;
 use utility_backend::time_series::compression::{
     init_global_compression_manager, spawn_compression_monitor, CompressionPolicy,
@@ -17,19 +18,24 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("starting utility-backend service");
 
+    let db_url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://utility:utility_secret@localhost:5432/utility_test".into());
+
+    let db_pool = sqlx::PgPool::connect(&db_url).await?;
+
     let sequencer = Arc::new(NonceSequencer::new());
     let reaper = sequencer.clone();
     tokio::spawn(async move {
         reaper.start_reaper().await;
     });
-    tokio::spawn(async {
-        db_active_connection_poller().await;
+
+    let metrics_pool = db_pool.clone();
+    tokio::spawn(async move {
+        db_active_connection_poller(metrics_pool).await;
     });
 
     // Initialise the global compression policy manager and spawn its
     // background monitoring task.
-    let db_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://utility:utility_secret@localhost:5432/utility_test".into());
     let compression_manager = Arc::new(CompressionPolicyManager::new(
         db_url,
         CompressionPolicy::default(),
@@ -37,7 +43,9 @@ async fn main() -> anyhow::Result<()> {
     init_global_compression_manager(compression_manager.clone());
     spawn_compression_monitor(compression_manager, Duration::from_secs(60));
 
-    let app = utility_backend::api::router::build_router(sequencer).await?;
+    let state = AppState { sequencer, db_pool };
+
+    let app = utility_backend::api::router::build_router(state).await?;
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 8443));
     tracing::info!("listening on {}", addr);
@@ -51,16 +59,7 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn db_active_connection_poller() {
-    let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://utility:utility_secret@localhost:5432/utility_test".into());
-    let pool = match sqlx::PgPool::connect(&database_url).await {
-        Ok(p) => p,
-        Err(e) => {
-            tracing::warn!("cannot connect to database for metrics polling: {}", e);
-            return;
-        }
-    };
+async fn db_active_connection_poller(pool: sqlx::PgPool) {
     let mut interval = tokio::time::interval(Duration::from_secs(30));
     loop {
         interval.tick().await;
