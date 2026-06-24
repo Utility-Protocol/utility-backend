@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use axum::{
     middleware as axum_mw,
     routing::{get, post},
@@ -8,9 +6,9 @@ use axum::{
 use tower_http::cors::CorsLayer;
 
 use super::handlers;
-use crate::soroban::sequencer::NonceSequencer;
+use crate::api::AppState;
 
-pub async fn build_router(sequencer: Arc<NonceSequencer>) -> anyhow::Result<Router> {
+pub async fn build_router(state: AppState) -> anyhow::Result<Router> {
     let cors = CorsLayer::permissive();
 
     let app = Router::new()
@@ -33,14 +31,13 @@ pub async fn build_router(sequencer: Arc<NonceSequencer>) -> anyhow::Result<Rout
         .route("/api/v1/meters/rotate-key", post(handlers::rotate_key))
         .route("/api/v1/nonce/status", get(handlers::nonce_status))
         .route("/metrics", get(handlers::metrics_handler))
-        .route("/api/v1/nonce/status", get(handlers::nonce_status))
         .route(
             "/api/v1/database/compression/status",
             get(handlers::compression_status),
         )
         .layer(axum_mw::from_fn(crate::api::middleware::rate_limit_layer))
         .layer(cors)
-        .with_state(sequencer);
+        .with_state(state);
 
     Ok(app)
 }

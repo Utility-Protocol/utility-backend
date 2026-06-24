@@ -3,14 +3,15 @@ use ed25519_dalek::VerifyingKey;
 use hex;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use sqlx::{Pool, Postgres};
 
 use crate::soroban::sequencer::NonceSequencer;
-
 use crate::api::metrics;
 use crate::gateway::crypto::global_registry;
 use crate::time_series::analytics::{global_engine, DiagnosticReport};
 use crate::time_series::compression::CompressionStatus;
 use crate::time_series::drift::CalibrationResult;
+use crate::time_series::ingestion::ingest_telemetry;
 
 #[derive(Serialize)]
 pub struct MeterInfo {
@@ -81,8 +82,21 @@ pub async fn list_tariffs() -> Json<Vec<&'static str>> {
     ])
 }
 
-pub async fn submit_reading(Json(_body): Json<ReadingSubmission>) -> Json<&'static str> {
-    Json("reading accepted")
+pub async fn submit_reading(
+    State(pool): State<Pool<Postgres>>,
+    Json(body): Json<ReadingSubmission>,
+) -> Result<Json<&'static str>, StatusCode> {
+    let recorded_at = chrono::DateTime::parse_from_rfc3339(&body.timestamp)
+        .map(|dt| dt.with_timezone(&chrono::Utc))
+        .unwrap_or_else(|_| chrono::Utc::now());
+
+    match ingest_telemetry(&pool, &body.meter_id, body.value, recorded_at).await {
+        Ok(_) => Ok(Json("reading accepted")),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to ingest reading");
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
 }
 
 pub async fn settle_account(Json(_body): Json<SettlementRequest>) -> Json<&'static str> {

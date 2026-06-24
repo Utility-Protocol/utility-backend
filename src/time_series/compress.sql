@@ -54,3 +54,26 @@ $$;
 -- Composite index for efficient per-meter time-range queries
 CREATE INDEX IF NOT EXISTS idx_meter_readings_meter_id_ts
     ON meter_readings (meter_id, recorded_at DESC);
+
+-- Telemetry events table with per-meter monotonic sequencing
+CREATE TABLE IF NOT EXISTS telemetry_events (
+    meter_id TEXT NOT NULL,
+    recorded_at TIMESTAMPTZ NOT NULL,
+    reading DOUBLE PRECISION NOT NULL,
+    sequence INTEGER NOT NULL,
+    UNIQUE(meter_id, sequence)
+);
+
+-- Index for efficient sequence-based retrieval by the tariff engine
+CREATE INDEX IF NOT EXISTS idx_telemetry_events_meter_id_sequence
+    ON telemetry_events (meter_id, sequence ASC);
+
+-- Hypertable setup for telemetry_events (if TimescaleDB is present)
+DO $$
+BEGIN
+    PERFORM * FROM pg_extension WHERE extname = 'timescaledb';
+    IF FOUND THEN
+        PERFORM create_hypertable('telemetry_events', 'recorded_at', if_not_exists => TRUE);
+    END IF;
+END
+$$;
