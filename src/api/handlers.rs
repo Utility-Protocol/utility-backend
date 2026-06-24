@@ -4,10 +4,11 @@ use hex;
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Postgres};
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use crate::api::metrics;
 use crate::gateway::crypto::global_registry;
-use crate::soroban::sequencer::NonceSequencer;
+use crate::soroban::{rpc::CircuitBreaker, sequencer::NonceSequencer};
 use crate::time_series::analytics::{global_engine, DiagnosticReport};
 use crate::time_series::compression::CompressionStatus;
 use crate::time_series::drift::CalibrationResult;
@@ -72,6 +73,13 @@ pub async fn get_meter(Path(id): Path<String>) -> Json<MeterInfo> {
         location: "substation-alpha".into(),
         last_reading: 1234.56,
     })
+}
+
+pub async fn soroban_circuit_status(
+    State(breaker): State<Arc<Mutex<CircuitBreaker>>>,
+) -> Json<crate::soroban::rpc::CircuitBreakerSnapshot> {
+    let breaker = breaker.lock().await;
+    Json(breaker.snapshot())
 }
 
 pub async fn list_tariffs() -> Json<Vec<&'static str>> {
