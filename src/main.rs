@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tracing_subscriber::EnvFilter;
 
-use utility_backend::api::AppState;
+use utility_backend::api::{middleware::DynamicRateLimiter, AppState};
 use utility_backend::soroban::sequencer::NonceSequencer;
 use utility_backend::time_series::compression::{
     init_global_compression_manager, spawn_compression_monitor, CompressionPolicy,
@@ -43,7 +43,12 @@ async fn main() -> anyhow::Result<()> {
     init_global_compression_manager(compression_manager.clone());
     spawn_compression_monitor(compression_manager, Duration::from_secs(60));
 
-    let state = AppState { sequencer, db_pool };
+    let rate_limiter = Arc::new(DynamicRateLimiter::new());
+    let state = AppState {
+        sequencer,
+        db_pool,
+        rate_limiter,
+    };
 
     let app = utility_backend::api::router::build_router(state).await?;
 

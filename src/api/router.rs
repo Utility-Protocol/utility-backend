@@ -30,12 +30,19 @@ pub async fn build_router(state: AppState) -> anyhow::Result<Router> {
         .route("/api/v1/meters/register", post(handlers::register_meter))
         .route("/api/v1/meters/rotate-key", post(handlers::rotate_key))
         .route("/api/v1/nonce/status", get(handlers::nonce_status))
+        .route(
+            "/api/v1/rate-limiter/status",
+            get(crate::api::middleware::rate_limiter_status),
+        )
         .route("/metrics", get(handlers::metrics_handler))
         .route(
             "/api/v1/database/compression/status",
             get(handlers::compression_status),
         )
-        .layer(axum_mw::from_fn(crate::api::middleware::rate_limit_layer))
+        .layer(axum_mw::from_fn_with_state(
+            state.rate_limiter.clone(),
+            crate::api::middleware::rate_limit_layer,
+        ))
         .layer(cors)
         .with_state(state);
 
