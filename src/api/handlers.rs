@@ -1,4 +1,6 @@
-use axum::{extract::Path, extract::State, http::StatusCode, response::IntoResponse, Json};
+use axum::{
+    extract::Path, extract::Query, extract::State, http::StatusCode, response::IntoResponse, Json,
+};
 use ed25519_dalek::VerifyingKey;
 use hex;
 use serde::{Deserialize, Serialize};
@@ -8,6 +10,7 @@ use std::sync::Arc;
 use crate::api::metrics;
 use crate::gateway::crypto::global_registry;
 use crate::soroban::sequencer::NonceSequencer;
+use crate::tariffs::engine::{global_tariff_engine, TariffContext, TariffExplanation};
 use crate::time_series::analytics::{global_engine, DiagnosticReport};
 use crate::time_series::compression::CompressionStatus;
 use crate::time_series::drift::CalibrationResult;
@@ -72,6 +75,34 @@ pub async fn get_meter(Path(id): Path<String>) -> Json<MeterInfo> {
         location: "substation-alpha".into(),
         last_reading: 1234.56,
     })
+}
+
+#[derive(Deserialize)]
+pub struct TariffExplainQuery {
+    pub meter_id: String,
+    pub ts: String,
+    pub volume: Option<f64>,
+    pub consumption_tier: Option<String>,
+    pub grid_congestion_level: Option<u8>,
+    pub is_holiday: Option<bool>,
+}
+
+pub async fn explain_tariff(
+    Query(query): Query<TariffExplainQuery>,
+) -> Result<Json<TariffExplanation>, StatusCode> {
+    let timestamp = chrono::DateTime::parse_from_rfc3339(&query.ts)
+        .map_err(|_| StatusCode::BAD_REQUEST)?
+        .with_timezone(&chrono::Utc);
+    let context = TariffContext {
+        meter_id: query.meter_id,
+        timestamp,
+        volume: query.volume.unwrap_or(1.0),
+        consumption_tier: query.consumption_tier,
+        grid_congestion_level: query.grid_congestion_level,
+        is_holiday: query.is_holiday.unwrap_or(false),
+    };
+
+    Ok(Json(global_tariff_engine().explain(context)))
 }
 
 pub async fn list_tariffs() -> Json<Vec<&'static str>> {
