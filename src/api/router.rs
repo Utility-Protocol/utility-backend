@@ -17,6 +17,7 @@ pub async fn build_router(state: AppState) -> anyhow::Result<Router> {
         .route("/api/v1/meters", get(handlers::list_meters))
         .route("/api/v1/meters/:id", get(handlers::get_meter))
         .route("/api/v1/tariffs", get(handlers::list_tariffs))
+        .route("/api/v1/tariffs/explain", get(handlers::explain_tariff))
         .route("/api/v1/readings", post(handlers::submit_reading))
         .route("/api/v1/settle", post(handlers::settle_account))
         .route(
