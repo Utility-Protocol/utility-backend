@@ -8,6 +8,7 @@ use std::sync::Arc;
 use crate::api::metrics;
 use crate::gateway::crypto::global_registry;
 use crate::soroban::sequencer::NonceSequencer;
+use crate::soroban::sync::{sync_status, SyncCursorStatus};
 use crate::time_series::analytics::{global_engine, DiagnosticReport};
 use crate::time_series::compression::CompressionStatus;
 use crate::time_series::drift::CalibrationResult;
@@ -54,6 +55,15 @@ pub async fn nonce_status(
         })
         .collect();
     Json(statuses)
+}
+
+pub async fn soroban_sync_status(
+    State(pool): State<Pool<Postgres>>,
+) -> Result<Json<Vec<SyncCursorStatus>>, StatusCode> {
+    sync_status(&pool).await.map(Json).map_err(|e| {
+        tracing::warn!(error = %e, "failed to load Soroban sync status");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })
 }
 
 pub async fn list_meters() -> Json<Vec<MeterInfo>> {
