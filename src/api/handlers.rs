@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use crate::api::metrics;
 use crate::gateway::crypto::global_registry;
+use crate::gateway::lock::{ActiveLock, AdvisoryLock};
 use crate::soroban::sequencer::NonceSequencer;
 use crate::time_series::analytics::{global_engine, DiagnosticReport};
 use crate::time_series::compression::CompressionStatus;
@@ -54,6 +55,10 @@ pub async fn nonce_status(
         })
         .collect();
     Json(statuses)
+}
+
+pub async fn list_gateway_locks(State(lock): State<Arc<AdvisoryLock>>) -> Json<Vec<ActiveLock>> {
+    Json(lock.active_locks())
 }
 
 pub async fn list_meters() -> Json<Vec<MeterInfo>> {
