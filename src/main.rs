@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tracing_subscriber::EnvFilter;
 
+use utility_backend::api::middleware::DynamicRateLimiter;
 use utility_backend::api::AppState;
 use utility_backend::gateway::lock::AdvisoryLock;
 use utility_backend::soroban::sequencer::NonceSequencer;
@@ -45,10 +46,12 @@ async fn main() -> anyhow::Result<()> {
     spawn_compression_monitor(compression_manager, Duration::from_secs(60));
 
     let advisory_lock = Arc::new(AdvisoryLock::postgres(db_pool.clone()));
+    let rate_limiter = Arc::new(DynamicRateLimiter::new());
     let state = AppState {
         sequencer,
         db_pool,
         advisory_lock,
+        rate_limiter,
     };
 
     let app = utility_backend::api::router::build_router(state).await?;
