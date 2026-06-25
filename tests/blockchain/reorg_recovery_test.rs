@@ -47,7 +47,9 @@ struct MockContract {
 impl ReorgContract for MockContract {
     async fn rollback_batch(&self, batch_id: u64, _reason: u32) -> Result<(), String> {
         if let Some(gate) = &self.gate {
-            gate.lock().await;
+            // Block until the test releases the gate, simulating in-flight work.
+            // Named binding (not `_`) so it isn't flagged as an unused guard.
+            let _held = gate.lock().await;
         }
         self.rollbacks.lock().push(batch_id);
         Ok(())
