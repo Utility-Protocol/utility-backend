@@ -90,3 +90,46 @@ proptest::proptest! {
         });
     }
 }
+
+#[test]
+fn test_soroban_sync_gap_detection_allows_small_and_large_skips() {
+    use chrono::Utc;
+    use utility_backend::soroban::sync::{detect_gaps, LedgerEvent};
+
+    let events = vec![
+        LedgerEvent {
+            event_id: "evt-11".into(),
+            contract_id: "contract-a".into(),
+            sequence: 11,
+            timestamp: Utc::now(),
+        },
+        LedgerEvent {
+            event_id: "evt-150".into(),
+            contract_id: "contract-a".into(),
+            sequence: 150,
+            timestamp: Utc::now(),
+        },
+    ];
+
+    let gaps = detect_gaps("contract-a", 10, &events);
+    assert_eq!(gaps.len(), 1);
+    assert_eq!(gaps[0].start_sequence, 12);
+    assert_eq!(gaps[0].end_sequence, 149);
+}
+
+#[test]
+fn test_soroban_sync_gap_detection_ignores_contiguous_events() {
+    use chrono::Utc;
+    use utility_backend::soroban::sync::{detect_gaps, LedgerEvent};
+
+    let events = (6..=8)
+        .map(|sequence| LedgerEvent {
+            event_id: format!("evt-{sequence}"),
+            contract_id: "contract-b".into(),
+            sequence,
+            timestamp: Utc::now(),
+        })
+        .collect::<Vec<_>>();
+
+    assert!(detect_gaps("contract-b", 5, &events).is_empty());
+}
