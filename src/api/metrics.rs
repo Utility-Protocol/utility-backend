@@ -1,7 +1,7 @@
 use lazy_static::lazy_static;
 use prometheus::{
-    register_counter, register_counter_vec, register_gauge, register_histogram_vec, Counter,
-    CounterVec, Gauge, HistogramVec,
+    register_counter, register_counter_vec, register_gauge, register_gauge_vec,
+    register_histogram_vec, Counter, CounterVec, Gauge, GaugeVec, HistogramVec,
 };
 
 lazy_static! {
@@ -210,4 +210,62 @@ pub fn inc_fd_connection_resets() {
 
 pub fn set_tcp_active_connections(count: f64) {
     TCP_ACTIVE_CONNECTIONS.set(count);
+}
+
+lazy_static! {
+    pub static ref POOL_CONNECTIONS_ACTIVE: GaugeVec = register_gauge_vec!(
+        "utility_pool_connections_active",
+        "Active connections per priority class",
+        &["class"]
+    )
+    .unwrap();
+    pub static ref POOL_CONNECTIONS_IDLE: GaugeVec = register_gauge_vec!(
+        "utility_pool_connections_idle",
+        "Idle connection slots per priority class",
+        &["class"]
+    )
+    .unwrap();
+    pub static ref POOL_WAIT_TIME_MS: HistogramVec = register_histogram_vec!(
+        "utility_pool_wait_time_ms",
+        "Connection acquisition wait time per priority class, in milliseconds",
+        &["class"]
+    )
+    .unwrap();
+    pub static ref POOL_PRIORITY_INHERITANCE_COUNT: Counter = register_counter!(
+        "utility_pool_priority_inheritance_count_total",
+        "Total priority-inheritance events (lower-priority slot lent to a higher-priority task)"
+    )
+    .unwrap();
+    pub static ref POOL_CLASS_STARVATION_EVENTS: CounterVec = register_counter_vec!(
+        "utility_pool_class_starvation_events_total",
+        "Total starvation events per priority class",
+        &["class"]
+    )
+    .unwrap();
+}
+
+pub fn set_pool_active(class: &str, count: f64) {
+    POOL_CONNECTIONS_ACTIVE
+        .with_label_values(&[class])
+        .set(count);
+}
+
+pub fn set_pool_idle(class: &str, count: f64) {
+    POOL_CONNECTIONS_IDLE.with_label_values(&[class]).set(count);
+}
+
+pub fn observe_pool_wait_ms(class: &str, wait_ms: f64) {
+    POOL_WAIT_TIME_MS
+        .with_label_values(&[class])
+        .observe(wait_ms);
+}
+
+pub fn inc_priority_inheritance() {
+    POOL_PRIORITY_INHERITANCE_COUNT.inc();
+}
+
+pub fn inc_pool_starvation(class: &str) {
+    POOL_CLASS_STARVATION_EVENTS
+        .with_label_values(&[class])
+        .inc();
 }
