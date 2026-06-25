@@ -63,4 +63,6 @@ path = "src/lib.rs"
 name = "parser_bench"
 harness = false
 
-
+[[test]]
+name = "double_mint_prevention"
+path = "tests/integration/double_mint_prevention.rs"
