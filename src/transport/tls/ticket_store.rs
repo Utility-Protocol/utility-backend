@@ -110,7 +110,7 @@ impl SessionTicketStore {
         let mut material = [0u8; KEY_LEN];
         SystemRandom::new()
             .fill(&mut material)
-            .map_err(|_| io::Error::new(io::ErrorKind::Other, "secure random generation failed"))?;
+            .map_err(|_| io::Error::other("secure random generation failed"))?;
         let mut aes_key = [0u8; AES_KEY_LEN];
         let mut hmac_key = [0u8; HMAC_KEY_LEN];
         aes_key.copy_from_slice(&material[..AES_KEY_LEN]);
