@@ -1,7 +1,8 @@
 //! Network transport layer.
 //!
-//! Currently houses the adaptive TCP connection lifecycle manager (see
-//! [`tcp`]) and its startup wiring (see [`lib`]).
+//! Houses the adaptive TCP connection lifecycle manager (see [`tcp`]) and its
+//! startup wiring (see [`lib`]), plus TLS session-ticket rotation (see [`tls`]).
 
 pub mod lib;
 pub mod tcp;
+pub mod tls;

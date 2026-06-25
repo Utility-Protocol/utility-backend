@@ -25,6 +25,7 @@ thiserror = "1"
 anyhow = "1"
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 rand = "0.8"
+ring = "0.17"
 hex = "0.4"
 sha2 = "0.10"
 bytes = "1"
@@ -35,7 +36,7 @@ deadpool-postgres = { version = "0.12", default-features = false, features = ["r
 prometheus = { version = "0.13", features = ["process"] }
 lazy_static = "1"
 reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
-rustls = "0.22"
+rustls = { version = "0.22", features = ["ring", "tls12"] }
 rustls-pemfile = "2"
 x509-parser = "0.16"
 tokio-rustls = "0.25"
@@ -65,8 +66,10 @@ path = "src/lib.rs"
 name = "parser_bench"
 harness = false
 
+[[test]]
+name = "double_mint_prevention"
+path = "tests/integration/double_mint_prevention.rs"
+
 [[bench]]
 name = "merkle_bench"
 harness = false
-
-
