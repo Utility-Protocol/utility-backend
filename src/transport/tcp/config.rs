@@ -1,8 +1,16 @@
+//! Configuration for the adaptive TCP connection lifecycle manager.
+//!
+//! These knobs drive the [`ConnectionManager`](super::connection_manager::ConnectionManager),
+//! [`FdMonitor`](super::fd_monitor::FdMonitor) and
+//! [`ConnectionRateLimiter`](super::rate_limiter::ConnectionRateLimiter). All
+//! values have sensible defaults sized for the ~16 K concurrent long-lived
+//! meter sockets described in the design (issue #53).
+
 use std::time::Duration;
 
 pub const DEFAULT_MAX_BUFFER_PER_CONN: usize = 65_536;
 pub const DEFAULT_MAX_FRAME_PAYLOAD: usize = u16::MAX as usize;
-pub const DEFAULT_IDLE_TIMEOUT_SECS: u64 = 60;
+pub const DEFAULT_IDLE_TIMEOUT_SECS: u64 = 300;
 
 #[derive(Debug, Clone)]
 pub struct ReassemblyConfig {
@@ -32,15 +40,8 @@ impl Default for ReassemblyConfig {
             max_frame_payload: DEFAULT_MAX_FRAME_PAYLOAD,
             idle_timeout: Duration::from_secs(DEFAULT_IDLE_TIMEOUT_SECS),
         }
-//! Configuration for the adaptive TCP connection lifecycle manager.
-//!
-//! These knobs drive the [`ConnectionManager`](super::connection_manager::ConnectionManager),
-//! [`FdMonitor`](super::fd_monitor::FdMonitor) and
-//! [`ConnectionRateLimiter`](super::rate_limiter::ConnectionRateLimiter). All
-//! values have sensible defaults sized for the ~16 K concurrent long-lived
-//! meter sockets described in the design (issue #53).
-
-use std::time::Duration;
+    }
+}
 
 /// Tunable parameters for the TCP transport layer.
 #[derive(Clone, Debug)]
@@ -75,7 +76,7 @@ impl Default for TcpTransportConfig {
     fn default() -> Self {
         Self {
             max_concurrent_connections: 16_384,
-            idle_timeout_secs: 300,
+            idle_timeout_secs: DEFAULT_IDLE_TIMEOUT_SECS,
             max_conn_rate_per_sec: 500,
             surge_threshold_per_sec: 1_000,
             fd_soft_limit_ratio: 0.80,

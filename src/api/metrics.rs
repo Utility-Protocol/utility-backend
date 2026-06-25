@@ -100,6 +100,22 @@ pub fn get_starvation_count() -> f64 {
     DB_POOL_STARVATION.get()
 }
 
+pub fn record_tcp_partial_frame_buffered() {
+    TCP_PARTIAL_FRAMES_BUFFERED.inc();
+}
+
+pub fn record_tcp_complete_frame_delivered() {
+    TCP_COMPLETE_FRAMES_DELIVERED.inc();
+}
+
+pub fn record_tcp_frame_too_large_error() {
+    TCP_FRAME_TOO_LARGE_ERRORS.inc();
+}
+
+pub fn record_tcp_buffer_exceeded_reset() {
+    TCP_BUFFER_EXCEEDED_RESETS.inc();
+}
+
 lazy_static! {
     pub static ref MERKLE_TREE_BUILD_DURATION_MS: HistogramVec = register_histogram_vec!(
         "utility_merkle_tree_build_duration_ms",
