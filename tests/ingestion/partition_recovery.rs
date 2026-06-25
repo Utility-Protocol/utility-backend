@@ -1,5 +1,5 @@
-use utility_backend::ingestion::watermark::{WatermarkVector, HlcTimestamp};
 use std::sync::{Arc, RwLock};
+use utility_backend::ingestion::watermark::{HlcTimestamp, WatermarkVector};
 
 #[tokio::test]
 async fn test_partition_recovery_convergence() {
@@ -10,19 +10,25 @@ async fn test_partition_recovery_convergence() {
     {
         let mut v1 = wv1.write().unwrap();
         // Node 1 physical time 1000
-        v1.entries.insert(1, utility_backend::ingestion::watermark::WatermarkEntry {
-            hlc: HlcTimestamp::new(1000, 0),
-            offset: 100,
-        });
+        v1.entries.insert(
+            1,
+            utility_backend::ingestion::watermark::WatermarkEntry {
+                hlc: HlcTimestamp::new(1000, 0),
+                offset: 100,
+            },
+        );
     }
 
     {
         let mut v2 = wv2.write().unwrap();
         // Node 2 physical time 1100
-        v2.entries.insert(1, utility_backend::ingestion::watermark::WatermarkEntry {
-            hlc: HlcTimestamp::new(1100, 0),
-            offset: 105,
-        });
+        v2.entries.insert(
+            1,
+            utility_backend::ingestion::watermark::WatermarkEntry {
+                hlc: HlcTimestamp::new(1100, 0),
+                offset: 105,
+            },
+        );
     }
 
     // Reconciliation: merge vectors
@@ -38,7 +44,10 @@ async fn test_partition_recovery_convergence() {
 
         let mut v1 = wv1.write().unwrap();
         let diverged = v1.merge(&v2_snapshot);
-        assert!(diverged.is_empty(), "Should not diverge with small offset difference");
+        assert!(
+            diverged.is_empty(),
+            "Should not diverge with small offset difference"
+        );
     }
 
     // Verify convergence
@@ -58,18 +67,24 @@ async fn test_divergence_triggers_reconciliation() {
     // Node 1 is way ahead in offset but behind in HLC (e.g. clock drift or late arrival)
     {
         let mut v1 = wv1.write().unwrap();
-        v1.entries.insert(1, utility_backend::ingestion::watermark::WatermarkEntry {
-            hlc: HlcTimestamp::new(1000, 0),
-            offset: 5000,
-        });
+        v1.entries.insert(
+            1,
+            utility_backend::ingestion::watermark::WatermarkEntry {
+                hlc: HlcTimestamp::new(1000, 0),
+                offset: 5000,
+            },
+        );
     }
 
     {
         let mut v2 = wv2.write().unwrap();
-        v2.entries.insert(1, utility_backend::ingestion::watermark::WatermarkEntry {
-            hlc: HlcTimestamp::new(1100, 0),
-            offset: 1000,
-        });
+        v2.entries.insert(
+            1,
+            utility_backend::ingestion::watermark::WatermarkEntry {
+                hlc: HlcTimestamp::new(1100, 0),
+                offset: 1000,
+            },
+        );
     }
 
     // Merge v2 into v1

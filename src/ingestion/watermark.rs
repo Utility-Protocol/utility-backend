@@ -64,12 +64,13 @@ impl WatermarkVector {
             .unwrap()
             .as_millis() as u64;
 
-        let entry = self.entries.entry(source_id).or_insert_with(|| {
-            WatermarkEntry {
+        let entry = self
+            .entries
+            .entry(source_id)
+            .or_insert_with(|| WatermarkEntry {
                 hlc: HlcTimestamp::new(now_physical, 0),
                 offset: 0,
-            }
-        });
+            });
 
         entry.hlc = entry.hlc.tick(now_physical);
         entry.offset = offset;
@@ -148,9 +149,27 @@ mod tests {
         let mut v1 = WatermarkVector::new();
         let mut v2 = WatermarkVector::new();
 
-        v1.entries.insert(1, WatermarkEntry { hlc: HlcTimestamp::new(100, 0), offset: 10 });
-        v2.entries.insert(1, WatermarkEntry { hlc: HlcTimestamp::new(100, 1), offset: 11 });
-        v2.entries.insert(2, WatermarkEntry { hlc: HlcTimestamp::new(100, 0), offset: 5 });
+        v1.entries.insert(
+            1,
+            WatermarkEntry {
+                hlc: HlcTimestamp::new(100, 0),
+                offset: 10,
+            },
+        );
+        v2.entries.insert(
+            1,
+            WatermarkEntry {
+                hlc: HlcTimestamp::new(100, 1),
+                offset: 11,
+            },
+        );
+        v2.entries.insert(
+            2,
+            WatermarkEntry {
+                hlc: HlcTimestamp::new(100, 0),
+                offset: 5,
+            },
+        );
 
         let diverged = v1.merge(&v2);
         assert!(diverged.is_empty());
@@ -164,8 +183,20 @@ mod tests {
         let mut v2 = WatermarkVector::new();
 
         // v1 is ahead in offset but behind in HLC
-        v1.entries.insert(1, WatermarkEntry { hlc: HlcTimestamp::new(100, 0), offset: 2000 });
-        v2.entries.insert(1, WatermarkEntry { hlc: HlcTimestamp::new(101, 0), offset: 500 });
+        v1.entries.insert(
+            1,
+            WatermarkEntry {
+                hlc: HlcTimestamp::new(100, 0),
+                offset: 2000,
+            },
+        );
+        v2.entries.insert(
+            1,
+            WatermarkEntry {
+                hlc: HlcTimestamp::new(101, 0),
+                offset: 500,
+            },
+        );
 
         let diverged = v1.merge(&v2);
         assert_eq!(diverged, vec![1]);

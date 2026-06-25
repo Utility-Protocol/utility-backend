@@ -1,12 +1,12 @@
 use super::{
     drift_estimator::KalmanClockState,
     tai64n::{ClockCorrection, Tai64N},
-    watermark::{WatermarkVector, HlcTimestamp},
+    watermark::{HlcTimestamp, WatermarkVector},
 };
-use std::sync::{Arc, Mutex};
-use std::sync::RwLock;
-use rocksdb::{DB, Options};
+use rocksdb::{Options, DB};
 use std::path::Path;
+use std::sync::RwLock;
+use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
 pub struct ClockCorrector {
@@ -88,7 +88,9 @@ impl Collector {
         for (id, entry) in &wv.entries {
             let key = format!("wm:{}", id);
             let value = format!("{}:{}", entry.hlc.as_u64(), entry.offset);
-            self.db.put(key.as_bytes(), value.as_bytes()).expect("Failed to persist watermark");
+            self.db
+                .put(key.as_bytes(), value.as_bytes())
+                .expect("Failed to persist watermark");
         }
     }
 
@@ -102,11 +104,16 @@ impl Collector {
                     let val_str = String::from_utf8_lossy(&value);
                     let parts: Vec<&str> = val_str.split(':').collect();
                     if parts.len() == 2 {
-                        if let (Ok(hlc_val), Ok(offset)) = (parts[0].parse::<u64>(), parts[1].parse::<u64>()) {
-                            wv.entries.insert(id, crate::ingestion::watermark::WatermarkEntry {
-                                hlc: HlcTimestamp::from(hlc_val),
-                                offset,
-                            });
+                        if let (Ok(hlc_val), Ok(offset)) =
+                            (parts[0].parse::<u64>(), parts[1].parse::<u64>())
+                        {
+                            wv.entries.insert(
+                                id,
+                                crate::ingestion::watermark::WatermarkEntry {
+                                    hlc: HlcTimestamp::from(hlc_val),
+                                    offset,
+                                },
+                            );
                         }
                     }
                 }

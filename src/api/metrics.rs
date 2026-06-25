@@ -259,6 +259,9 @@ pub fn record_reconciliation_duration_ms(status: &str, duration_ms: f64) {
 
 pub fn inc_partition_seconds(seconds: u64) {
     PARTITION_SECONDS_TOTAL.inc_by(seconds as f64);
+}
+
+lazy_static! {
     pub static ref POOL_CONNECTIONS_ACTIVE: GaugeVec = register_gauge_vec!(
         "utility_pool_connections_active",
         "Active connections per priority class",
