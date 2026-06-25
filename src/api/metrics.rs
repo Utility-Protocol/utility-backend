@@ -77,3 +77,42 @@ pub fn set_db_waiting_requests(count: f64) {
 pub fn get_starvation_count() -> f64 {
     DB_POOL_STARVATION.get()
 }
+
+lazy_static! {
+    pub static ref MERKLE_TREE_BUILD_DURATION_MS: HistogramVec = register_histogram_vec!(
+        "utility_merkle_tree_build_duration_ms",
+        "Merkle tree construction duration in milliseconds",
+        &["commodity_type"]
+    )
+    .unwrap();
+    pub static ref BATCH_PROOF_SUBMISSION_COUNT: CounterVec = register_counter_vec!(
+        "utility_batch_proof_submission_count_total",
+        "Total number of Merkle batch proof submissions",
+        &["commodity_type", "status"]
+    )
+    .unwrap();
+    pub static ref ONCHAIN_VERIFICATION_GAS_USED: HistogramVec = register_histogram_vec!(
+        "utility_onchain_verification_gas_used",
+        "Soroban on-chain Merkle batch verification gas used",
+        &["commodity_type"]
+    )
+    .unwrap();
+}
+
+pub fn record_merkle_tree_build_duration_ms(commodity_type: &str, duration_ms: f64) {
+    MERKLE_TREE_BUILD_DURATION_MS
+        .with_label_values(&[commodity_type])
+        .observe(duration_ms);
+}
+
+pub fn record_batch_proof_submission(commodity_type: &str, status: &str) {
+    BATCH_PROOF_SUBMISSION_COUNT
+        .with_label_values(&[commodity_type, status])
+        .inc();
+}
+
+pub fn record_onchain_verification_gas_used(commodity_type: &str, gas_used: f64) {
+    ONCHAIN_VERIFICATION_GAS_USED
+        .with_label_values(&[commodity_type])
+        .observe(gas_used);
+}
