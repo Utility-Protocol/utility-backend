@@ -523,7 +523,6 @@ mod tests {
 
 use futures::future::BoxFuture;
 use sqlx::{PgConnection, PgPool};
-use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
