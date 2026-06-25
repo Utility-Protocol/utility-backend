@@ -6,3 +6,4 @@ pub mod soroban;
 pub mod tariffs;
 pub mod time_series;
 pub mod transport;
+pub mod types;
