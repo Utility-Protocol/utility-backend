@@ -1,3 +1,4 @@
+use crate::gateway::lock::AdvisoryLock;
 use crate::soroban::sequencer::NonceSequencer;
 use axum::extract::FromRef;
 use sqlx::{Pool, Postgres};
@@ -15,7 +16,7 @@ pub mod router;
 pub struct AppState {
     pub sequencer: Arc<NonceSequencer>,
     pub db_pool: Pool<Postgres>,
-    pub rate_limiter: Arc<DynamicRateLimiter>,
+    pub advisory_lock: Arc<AdvisoryLock>,
 }
 
 impl FromRef<AppState> for Arc<NonceSequencer> {
@@ -30,8 +31,8 @@ impl FromRef<AppState> for Pool<Postgres> {
     }
 }
 
-impl FromRef<AppState> for Arc<DynamicRateLimiter> {
+impl FromRef<AppState> for Arc<AdvisoryLock> {
     fn from_ref(state: &AppState) -> Self {
-        state.rate_limiter.clone()
+        state.advisory_lock.clone()
     }
 }
