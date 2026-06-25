@@ -163,6 +163,10 @@ pub fn current_fd_count() -> io::Result<u64> {
 }
 
 /// Read the soft limit of `RLIMIT_NOFILE` for the current process.
+///
+/// `rlim_t` is `u64` on Linux but its width varies across Unix targets, so the
+/// `as u64` conversion below is a no-op on some and widening on others.
+#[allow(clippy::unnecessary_cast)]
 pub fn rlimit_nofile() -> io::Result<u64> {
     #[cfg(unix)]
     {

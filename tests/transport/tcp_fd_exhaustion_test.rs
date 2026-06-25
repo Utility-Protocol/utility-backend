@@ -145,7 +145,7 @@ async fn test_fd_exhaustion_is_mitigated() {
     let rlimit_cur: u64 = 128;
     unsafe {
         let rl = libc::rlimit {
-            rlim_cur: rlimit_cur as libc::rlim_t,
+            rlim_cur: 128,
             rlim_max: original.rlim_max,
         };
         assert_eq!(libc::setrlimit(libc::RLIMIT_NOFILE, &rl), 0);
