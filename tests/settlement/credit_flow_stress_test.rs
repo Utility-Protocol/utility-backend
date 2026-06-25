@@ -38,7 +38,7 @@ impl MessageSink for LossySink {
         // Drop each `drop_modulo`-th id exactly once: `insert` returns true the
         // first time we see it, so that first delivery attempt is dropped.
         if self.drop_modulo != 0
-            && id % self.drop_modulo == 0
+            && id.is_multiple_of(self.drop_modulo)
             && self.dropped_once.lock().insert(id)
         {
             return;
