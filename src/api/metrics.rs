@@ -1,6 +1,6 @@
 use lazy_static::lazy_static;
 use prometheus::{
-    register_counter, register_counter_vec, register_gauge, register_histogram, register_histogram_vec, Counter,
+    register_counter, register_counter_vec, register_gauge, register_histogram,
     register_histogram_vec, Counter, CounterVec, Gauge, Histogram, HistogramVec,
 };
 
@@ -65,7 +65,8 @@ lazy_static! {
     pub static ref COMPACTION_DURATION_MS: Histogram = register_histogram!(
         "utility_compaction_duration_ms",
         "Chunk compaction duration in milliseconds"
-
+    )
+    .unwrap();
     pub static ref TCP_PARTIAL_FRAMES_BUFFERED: Counter = register_counter!(
         "tcp_partial_frames_buffered",
         "Number of TCP reads buffered by the frame reassembly layer"
@@ -120,6 +121,7 @@ pub fn get_starvation_count() -> f64 {
 
 pub fn record_compaction_attempt() {
     COMPACTION_ATTEMPTS.inc();
+}
 pub fn record_tcp_partial_frame_buffered() {
     TCP_PARTIAL_FRAMES_BUFFERED.inc();
 }
