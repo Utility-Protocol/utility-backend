@@ -3,6 +3,7 @@ pub mod blockchain;
 pub mod gateway;
 pub mod settlement;
 pub mod soroban;
+pub mod storage;
 pub mod tariffs;
 pub mod time_series;
 pub mod transport;
