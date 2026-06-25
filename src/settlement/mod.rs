@@ -1,7 +1,4 @@
-<<<<<<< Resource-Tokenization-Deposit-Attestation
 pub mod attestation_verifier;
+pub mod merkle;
 pub mod queue;
 pub mod submitter;
-=======
-pub mod merkle;
->>>>>>> main
