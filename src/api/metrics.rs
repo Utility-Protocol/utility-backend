@@ -1,6 +1,6 @@
 use lazy_static::lazy_static;
 use prometheus::{
-    register_counter, register_counter_vec, register_gauge, register_histogram,
+    register_counter, register_counter_vec, register_gauge, register_histogram, register_histogram_vec, Counter,
     register_histogram_vec, Counter, CounterVec, Gauge, Histogram, HistogramVec,
 };
 
@@ -113,4 +113,61 @@ pub fn record_compaction_lock_contention() {
 
 pub fn record_compaction_duration(duration_ms: f64) {
     COMPACTION_DURATION_MS.observe(duration_ms);
+}
+
+lazy_static! {
+    pub static ref FD_CURRENT_OPEN: Gauge = register_gauge!(
+        "utility_fd_current_open",
+        "Current number of open file descriptors for the process"
+    )
+    .unwrap();
+    pub static ref FD_SOFT_LIMIT: Gauge = register_gauge!(
+        "utility_fd_soft_limit",
+        "Soft file-descriptor limit (ratio of RLIMIT_NOFILE) for proactive reclamation"
+    )
+    .unwrap();
+    pub static ref FD_HARD_LIMIT: Gauge = register_gauge!(
+        "utility_fd_hard_limit",
+        "Hard file-descriptor limit (ratio of RLIMIT_NOFILE) triggering emergency reclamation"
+    )
+    .unwrap();
+    pub static ref FD_EVICTION_COUNT: Counter = register_counter!(
+        "utility_fd_eviction_count_total",
+        "Total connections evicted to reclaim file descriptors"
+    )
+    .unwrap();
+    pub static ref FD_CONNECTION_RESETS: Counter = register_counter!(
+        "utility_fd_connection_resets_total",
+        "Total stale meter connections reset (TCP RST) on reconnect"
+    )
+    .unwrap();
+    pub static ref TCP_ACTIVE_CONNECTIONS: Gauge = register_gauge!(
+        "utility_tcp_active_connections",
+        "Number of meter TCP connections currently tracked by the connection manager"
+    )
+    .unwrap();
+}
+
+pub fn set_fd_current_open(count: f64) {
+    FD_CURRENT_OPEN.set(count);
+}
+
+pub fn set_fd_soft_limit(limit: f64) {
+    FD_SOFT_LIMIT.set(limit);
+}
+
+pub fn set_fd_hard_limit(limit: f64) {
+    FD_HARD_LIMIT.set(limit);
+}
+
+pub fn inc_fd_eviction_count(by: u64) {
+    FD_EVICTION_COUNT.inc_by(by as f64);
+}
+
+pub fn inc_fd_connection_resets() {
+    FD_CONNECTION_RESETS.inc();
+}
+
+pub fn set_tcp_active_connections(count: f64) {
+    TCP_ACTIVE_CONNECTIONS.set(count);
 }
