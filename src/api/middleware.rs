@@ -1,19 +1,19 @@
 use axum::{
     body::Body,
+    extract::ConnectInfo,
+    extract::State,
     http::{Request, StatusCode},
     middleware::Next,
     response::Response,
-    extract::State,
-    extract::ConnectInfo,
 };
+use dashmap::DashMap;
+use parking_lot::Mutex;
+use std::collections::VecDeque;
+use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use tracing::warn;
-use dashmap::DashMap;
-use std::collections::VecDeque;
 use tokio::time::{Duration, Instant};
-use parking_lot::Mutex;
-use std::net::SocketAddr;
+use tracing::warn;
 
 lazy_static::lazy_static! {
     static ref START_INSTANT: Instant = Instant::now();
@@ -50,14 +50,21 @@ impl TokenBucket {
         let elapsed_ns = now - last;
         let new_tokens = (elapsed_ns as f64 * self.refill_rate as f64 / 1_000_000_000.0) as u64;
 
-        if new_tokens > 0 {
-            if self.last_refill_ns.compare_exchange(last, now, Ordering::AcqRel, Ordering::Relaxed).is_ok() {
-                loop {
-                    let current = self.tokens.load(Ordering::Acquire);
-                    let next = (current + new_tokens).min(self.max_tokens);
-                    if self.tokens.compare_exchange(current, next, Ordering::Release, Ordering::Relaxed).is_ok() {
-                        break;
-                    }
+        if new_tokens > 0
+            && self
+                .last_refill_ns
+                .compare_exchange(last, now, Ordering::AcqRel, Ordering::Relaxed)
+                .is_ok()
+        {
+            loop {
+                let current = self.tokens.load(Ordering::Acquire);
+                let next = (current + new_tokens).min(self.max_tokens);
+                if self
+                    .tokens
+                    .compare_exchange(current, next, Ordering::Release, Ordering::Relaxed)
+                    .is_ok()
+                {
+                    break;
                 }
             }
         }
@@ -189,7 +196,8 @@ impl DynamicRateLimiter {
                     let current_until = until;
                     fraud.violation_count += 1;
                     let backoff_secs = 2u64.pow(fraud.violation_count.min(10));
-                    fraud.flagged_until = Some(now.max(current_until) + Duration::from_secs(backoff_secs));
+                    fraud.flagged_until =
+                        Some(now.max(current_until) + Duration::from_secs(backoff_secs));
 
                     drop(fraud);
                     self.increment_rejection(source_id);
@@ -213,18 +221,23 @@ impl DynamicRateLimiter {
         let limit = if is_flagged { 10 } else { 100 };
 
         let bucket = {
-            let b = self.per_source_buckets.get(source_id).map(|e| e.value().clone());
+            let b = self
+                .per_source_buckets
+                .get(source_id)
+                .map(|e| e.value().clone());
             if let Some(b) = b {
                 if b.refill_rate == limit || source_id.starts_with("test-large-") {
                     b
                 } else {
                     let new_b = Arc::new(TokenBucket::new(limit, limit));
-                    self.per_source_buckets.insert(source_id.to_string(), new_b.clone());
+                    self.per_source_buckets
+                        .insert(source_id.to_string(), new_b.clone());
                     new_b
                 }
             } else {
                 let new_b = Arc::new(TokenBucket::new(limit, limit));
-                self.per_source_buckets.insert(source_id.to_string(), new_b.clone());
+                self.per_source_buckets
+                    .insert(source_id.to_string(), new_b.clone());
                 new_b
             }
         };
@@ -239,7 +252,9 @@ impl DynamicRateLimiter {
     }
 
     fn update_sliding_window(&self, source_id: &str, now: Instant) {
-        let entry = self.sliding_windows.entry(source_id.to_string())
+        let entry = self
+            .sliding_windows
+            .entry(source_id.to_string())
             .or_insert_with(|| Arc::new(Mutex::new(SlidingWindow::new(Duration::from_secs(1)))));
         let mut window = entry.lock();
         let count = window.add_event(now);
@@ -250,13 +265,23 @@ impl DynamicRateLimiter {
     }
 
     fn increment_rejection(&self, source_id: &str) {
-        let mut entry = self.rejection_counts.entry(source_id.to_string()).or_insert(0);
+        let mut entry = self
+            .rejection_counts
+            .entry(source_id.to_string())
+            .or_insert(0);
         *entry += 1;
     }
 
     fn handle_violation(&self, source_id: &str, now: Instant) {
-        let entry = self.fraud_contexts.entry(source_id.to_string())
-            .or_insert_with(|| Arc::new(Mutex::new(FraudContext { flagged_until: None, violation_count: 0 })));
+        let entry = self
+            .fraud_contexts
+            .entry(source_id.to_string())
+            .or_insert_with(|| {
+                Arc::new(Mutex::new(FraudContext {
+                    flagged_until: None,
+                    violation_count: 0,
+                }))
+            });
         let mut fraud = entry.lock();
 
         if let Some(until) = fraud.flagged_until {
@@ -268,7 +293,8 @@ impl DynamicRateLimiter {
             // Not currently in backoff but violated limit, let's flag it.
             fraud.flagged_until = Some(now + Duration::from_secs(60));
             fraud.violation_count = 0;
-            self.per_source_buckets.insert(source_id.to_string(), Arc::new(TokenBucket::new(10, 10)));
+            self.per_source_buckets
+                .insert(source_id.to_string(), Arc::new(TokenBucket::new(10, 10)));
         }
     }
 
@@ -277,8 +303,15 @@ impl DynamicRateLimiter {
     }
 
     fn flag_source_internal(&self, source_id: &str, now: Instant, with_initial_backoff: bool) {
-        let entry = self.fraud_contexts.entry(source_id.to_string())
-            .or_insert_with(|| Arc::new(Mutex::new(FraudContext { flagged_until: None, violation_count: 0 })));
+        let entry = self
+            .fraud_contexts
+            .entry(source_id.to_string())
+            .or_insert_with(|| {
+                Arc::new(Mutex::new(FraudContext {
+                    flagged_until: None,
+                    violation_count: 0,
+                }))
+            });
         let mut fraud = entry.lock();
 
         if fraud.flagged_until.is_none() {
@@ -289,12 +322,17 @@ impl DynamicRateLimiter {
                 fraud.flagged_until = Some(now + Duration::from_secs(60));
                 fraud.violation_count = 0;
             }
-            self.per_source_buckets.insert(source_id.to_string(), Arc::new(TokenBucket::new(10, 10)));
+            self.per_source_buckets
+                .insert(source_id.to_string(), Arc::new(TokenBucket::new(10, 10)));
         }
     }
 
     pub fn get_status(&self) -> Vec<(String, u64)> {
-        let mut counts: Vec<_> = self.rejection_counts.iter().map(|r| (r.key().clone(), *r.value())).collect();
+        let mut counts: Vec<_> = self
+            .rejection_counts
+            .iter()
+            .map(|r| (r.key().clone(), *r.value()))
+            .collect();
         counts.sort_by(|a, b| b.1.cmp(&a.1));
         counts.truncate(10);
         counts
@@ -380,19 +418,32 @@ mod tests {
 
         // Use a very high global limit and per-source limit to ensure we can reach 1000
         limiter.global_bucket.tokens.store(100000, Ordering::SeqCst);
-        limiter.per_source_buckets.insert(source.to_string(), Arc::new(TokenBucket::new(2000, 2000)));
+        limiter
+            .per_source_buckets
+            .insert(source.to_string(), Arc::new(TokenBucket::new(2000, 2000)));
 
         for i in 0..1000 {
             let ok = limiter.try_consume(source);
-            assert!(ok, "Failed at request {} - Global: {}, Per: {}",
+            assert!(
+                ok,
+                "Failed at request {} - Global: {}, Per: {}",
                 i,
                 limiter.global_bucket.tokens.load(Ordering::SeqCst),
-                limiter.per_source_buckets.get(source).unwrap().tokens.load(Ordering::SeqCst));
+                limiter
+                    .per_source_buckets
+                    .get(source)
+                    .unwrap()
+                    .tokens
+                    .load(Ordering::SeqCst)
+            );
         }
 
         // 1001st request should trigger flag and backoff, returning false
         let ok = limiter.try_consume(source);
-        assert!(!ok, "Request 1001 should have been rejected due to spike detection");
+        assert!(
+            !ok,
+            "Request 1001 should have been rejected due to spike detection"
+        );
     }
 
     #[tokio::test]
@@ -401,12 +452,24 @@ mod tests {
         let source = "127.0.0.1";
         limiter.flag_source(source);
 
-        let initial_until = limiter.fraud_contexts.get(source).unwrap().lock().flagged_until.unwrap();
+        let initial_until = limiter
+            .fraud_contexts
+            .get(source)
+            .unwrap()
+            .lock()
+            .flagged_until
+            .unwrap();
 
         // Request during backoff should extend it
         assert!(!limiter.try_consume(source));
 
-        let extended_until = limiter.fraud_contexts.get(source).unwrap().lock().flagged_until.unwrap();
+        let extended_until = limiter
+            .fraud_contexts
+            .get(source)
+            .unwrap()
+            .lock()
+            .flagged_until
+            .unwrap();
         assert!(extended_until > initial_until);
     }
 }
