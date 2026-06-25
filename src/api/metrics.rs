@@ -65,6 +65,25 @@ lazy_static! {
     pub static ref COMPACTION_DURATION_MS: Histogram = register_histogram!(
         "utility_compaction_duration_ms",
         "Chunk compaction duration in milliseconds"
+
+    pub static ref TCP_PARTIAL_FRAMES_BUFFERED: Counter = register_counter!(
+        "tcp_partial_frames_buffered",
+        "Number of TCP reads buffered by the frame reassembly layer"
+    )
+    .unwrap();
+    pub static ref TCP_COMPLETE_FRAMES_DELIVERED: Counter = register_counter!(
+        "tcp_complete_frames_delivered",
+        "Number of complete TCP frames delivered by the reassembly layer"
+    )
+    .unwrap();
+    pub static ref TCP_FRAME_TOO_LARGE_ERRORS: Counter = register_counter!(
+        "tcp_frame_too_large_errors",
+        "Number of TCP frames rejected because their payload exceeded the configured maximum"
+    )
+    .unwrap();
+    pub static ref TCP_BUFFER_EXCEEDED_RESETS: Counter = register_counter!(
+        "tcp_buffer_exceeded_resets",
+        "Number of TCP connections reset because their reassembly buffer exceeded the configured maximum"
     )
     .unwrap();
 }
@@ -101,6 +120,41 @@ pub fn get_starvation_count() -> f64 {
 
 pub fn record_compaction_attempt() {
     COMPACTION_ATTEMPTS.inc();
+pub fn record_tcp_partial_frame_buffered() {
+    TCP_PARTIAL_FRAMES_BUFFERED.inc();
+}
+
+pub fn record_tcp_complete_frame_delivered() {
+    TCP_COMPLETE_FRAMES_DELIVERED.inc();
+}
+
+pub fn record_tcp_frame_too_large_error() {
+    TCP_FRAME_TOO_LARGE_ERRORS.inc();
+}
+
+pub fn record_tcp_buffer_exceeded_reset() {
+    TCP_BUFFER_EXCEEDED_RESETS.inc();
+}
+
+lazy_static! {
+    pub static ref MERKLE_TREE_BUILD_DURATION_MS: HistogramVec = register_histogram_vec!(
+        "utility_merkle_tree_build_duration_ms",
+        "Merkle tree construction duration in milliseconds",
+        &["commodity_type"]
+    )
+    .unwrap();
+    pub static ref BATCH_PROOF_SUBMISSION_COUNT: CounterVec = register_counter_vec!(
+        "utility_batch_proof_submission_count_total",
+        "Total number of Merkle batch proof submissions",
+        &["commodity_type", "status"]
+    )
+    .unwrap();
+    pub static ref ONCHAIN_VERIFICATION_GAS_USED: HistogramVec = register_histogram_vec!(
+        "utility_onchain_verification_gas_used",
+        "Soroban on-chain Merkle batch verification gas used",
+        &["commodity_type"]
+    )
+    .unwrap();
 }
 
 pub fn record_compaction_skipped() {

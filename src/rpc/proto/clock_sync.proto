@@ -1,0 +1,17 @@
+syntax = "proto3";
+package utility.clock_sync;
+
+service ClockSync {
+  rpc PingPong(ClockSyncRequest) returns (ClockSyncResponse);
+}
+
+message ClockSyncRequest {
+  bytes tai64n_sent = 1;
+  bytes tai64n_received = 2;
+}
+
+message ClockSyncResponse {
+  bytes tai64n_sent = 1;
+  bytes tai64n_received = 2;
+  bytes tai64n_replied = 3;
+}

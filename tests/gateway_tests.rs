@@ -9,7 +9,8 @@ async fn test_backpressure_filter_roundtrip() {
     let (filter, mut rx) = BackpressureFilter::new(1024);
     let event = MeterEvent {
         meter_id: "MTR-TEST".into(),
-        timestamp: 1700000000,
+        timestamp_tai: utility_backend::ingestion::tai64n::Tai64N::from_unix_ms(1_700_000_000, 0),
+        correction_ns: 0,
         reading: 240.5,
         token_volume: 1000,
     };

@@ -3,3 +3,7 @@ worker_count = 2
 chunk_lease_ttl_ms = 5000
 max_compaction_duration_s = 30
 min_age_hours = 6
+[clock_sync]
+ntp_sample_interval_s = 30
+max_correction_ppm = 500
+cross_collector_sync_interval_s = 60

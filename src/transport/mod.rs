@@ -6,3 +6,5 @@
 pub mod lib;
 pub mod tcp;
 pub mod tls;
+
+pub use tcp::{FrameReassembler, ReassemblyConfig, TransportError};
