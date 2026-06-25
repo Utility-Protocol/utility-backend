@@ -1,6 +1,9 @@
 pub mod api;
 pub mod blockchain;
 pub mod gateway;
+pub mod ingestion;
+pub mod materialize;
+pub mod rpc;
 pub mod settlement;
 pub mod soroban;
 pub mod tariffs;

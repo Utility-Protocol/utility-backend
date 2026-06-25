@@ -20,6 +20,11 @@ jobs:
         with:
           components: clippy, rustfmt
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libssl-dev postgresql-client
+
       - name: Cache cargo registry
         uses: actions/cache@v3
         with:
@@ -36,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        image: timescale/timescaledb:latest-pg16
         env:
           POSTGRES_USER: utility
           POSTGRES_PASSWORD: utility_secret
@@ -48,12 +53,24 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      soroban-rpc:
+        image: stellar/soroban-rpc:latest
+        ports:
+          - 8000:8000
+        env:
+          SOROBAN_RPC_HOSTNAME: "0.0.0.0"
+          SOROBAN_RPC_PORT: "8000"
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libssl-dev postgresql-client
 
       - name: Cache cargo build
         uses: actions/cache@v3
@@ -63,7 +80,11 @@ jobs:
 
       - name: Run database migrations
         run: |
-          PGPASSWORD=utility_secret psql -h localhost -U utility -d utility_test -f src/time_series/compress.sql 2>&1 || true
+          until pg_isready -h localhost -p 5432 -U utility; do
+            echo "Waiting for database..."
+            sleep 2
+          done
+          PGPASSWORD=utility_secret psql -h localhost -U utility -d utility_test -f src/time_series/compress.sql
         env:
           PGPASSWORD: utility_secret
 
@@ -71,6 +92,7 @@ jobs:
         run: cargo test --all-features --verbose
         env:
           DATABASE_URL: postgres://utility:utility_secret@localhost:5432/utility_test
+          SOROBAN_RPC_URL: http://localhost:8000
 
   docker-build:
     runs-on: ubuntu-latest
