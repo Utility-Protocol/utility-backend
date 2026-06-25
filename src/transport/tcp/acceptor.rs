@@ -73,7 +73,9 @@ pub async fn accept_and_register(
         Ok(id) => id,
         Err(e) => {
             warn!(%peer, error = %e, "rejecting connection: bad meter handshake");
-            let _ = stream.set_linger(Some(std::time::Duration::ZERO));
+            // Reset the rejected connection via `SO_LINGER=0` (tokio's
+            // `set_linger` is deprecated); frees the descriptor immediately.
+            let _ = socket2::SockRef::from(&stream).set_linger(Some(std::time::Duration::ZERO));
             return Err(e);
         }
     };

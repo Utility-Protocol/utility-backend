@@ -74,7 +74,10 @@ impl ConnEntry {
     /// immediately releasing the descriptor.
     async fn reset(&self) {
         let mut stream = self.stream.lock().await;
-        let _ = stream.set_linger(Some(Duration::ZERO));
+        // `tokio`'s `set_linger` is deprecated (it can block the runtime thread
+        // on drop), so set `SO_LINGER=0` via `socket2`. A zero linger makes the
+        // close emit a TCP `RST` immediately without blocking.
+        let _ = socket2::SockRef::from(&*stream).set_linger(Some(Duration::ZERO));
         let _ = stream.shutdown().await;
     }
 }
