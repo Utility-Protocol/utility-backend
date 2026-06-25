@@ -13,6 +13,7 @@ pub async fn ingest_telemetry(
     meter_id: &str,
     reading: f64,
     recorded_at: DateTime<Utc>,
+    hlc_timestamp: u64,
 ) -> anyhow::Result<i32> {
     let mut tx = pool.begin().await?;
 
@@ -39,14 +40,15 @@ pub async fn ingest_telemetry(
     .fetch_one(&mut *tx)
     .await?;
 
-    // 3. Insert the new telemetry event with the computed sequence.
+    // 3. Insert the new telemetry event with the computed sequence and HLC timestamp.
     sqlx::query(
-        "INSERT INTO telemetry_events (meter_id, recorded_at, reading, sequence) VALUES ($1, $2, $3, $4)"
+        "INSERT INTO telemetry_events (meter_id, recorded_at, reading, sequence, hlc_timestamp) VALUES ($1, $2, $3, $4, $5)"
     )
     .bind(meter_id)
     .bind(recorded_at)
     .bind(reading)
     .bind(next_seq)
+    .bind(hlc_timestamp as i64)
     .execute(&mut *tx)
     .await?;
 
@@ -56,6 +58,7 @@ pub async fn ingest_telemetry(
         meter_id = %meter_id,
         sequence = next_seq,
         reading = reading,
+        hlc_timestamp = hlc_timestamp,
         "telemetry ingested successfully"
     );
 

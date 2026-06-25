@@ -11,16 +11,18 @@ pub struct Leaf {
     pub commodity_type: u8,
     pub scaled_reading: i128,
     pub nonce: u64,
+    pub hlc_timestamp: u64,
 }
 
 impl Leaf {
-    pub fn encode_scale_like(&self) -> [u8; 41] {
-        let mut out = [0u8; 41];
+    pub fn encode_scale_like(&self) -> [u8; 49] {
+        let mut out = [0u8; 49];
         out[0..8].copy_from_slice(&self.meter_id.to_le_bytes());
         out[8..16].copy_from_slice(&self.timestamp_ms.to_le_bytes());
         out[16] = self.commodity_type;
         out[17..33].copy_from_slice(&self.scaled_reading.to_le_bytes());
         out[33..41].copy_from_slice(&self.nonce.to_le_bytes());
+        out[41..49].copy_from_slice(&self.hlc_timestamp.to_le_bytes());
         out
     }
 

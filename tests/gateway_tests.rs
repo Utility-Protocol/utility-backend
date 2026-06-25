@@ -1,22 +1,28 @@
+use std::sync::Arc;
+
 use utility_backend::gateway::{
     crypto::{verify_packet, MeterIdentity},
+    hlc::HybridLogicalClock,
     lock::AdvisoryLock,
     stream::{BackpressureFilter, MeterEvent},
 };
 
 #[tokio::test]
 async fn test_backpressure_filter_roundtrip() {
-    let (filter, mut rx) = BackpressureFilter::new(1024);
+    let hlc = Arc::new(HybridLogicalClock::new());
+    let (filter, mut rx) = BackpressureFilter::new(1024, hlc);
     let event = MeterEvent {
         meter_id: "MTR-TEST".into(),
         timestamp: 1700000000,
         reading: 240.5,
         token_volume: 1000,
+        hlc_timestamp: 0,
     };
     filter.push(event).await.unwrap();
     let received = rx.recv().await.unwrap();
     assert_eq!(received.meter_id, "MTR-TEST");
     assert_eq!(received.token_volume, 1000);
+    assert!(received.hlc_timestamp > 0, "HLC timestamp should be assigned");
 }
 
 #[tokio::test]
