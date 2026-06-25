@@ -63,6 +63,14 @@ path = "src/lib.rs"
 name = "parser_bench"
 harness = false
 
+<<<<<<< Resource-Tokenization-Deposit-Attestation
 [[test]]
 name = "double_mint_prevention"
 path = "tests/integration/double_mint_prevention.rs"
+=======
+[[bench]]
+name = "merkle_bench"
+harness = false
+
+
+>>>>>>> main
