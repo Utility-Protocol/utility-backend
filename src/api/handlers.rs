@@ -187,6 +187,18 @@ pub struct RegisterMeterResponse {
     pub status: String,
 }
 
+pub async fn tenant_usage(
+    Path(tenant_id): Path<String>,
+) -> Result<Json<crate::time_series::pool::TenantUsage>, StatusCode> {
+    let manager =
+        crate::time_series::pool::global_pool_manager().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+    manager
+        .tenant_usage(&tenant_id)
+        .await
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
 pub async fn compression_status() -> Result<Json<CompressionStatus>, StatusCode> {
     if let Some(manager) = crate::time_series::compression::global_compression_manager() {
         match manager.get_compression_status().await {
