@@ -47,6 +47,27 @@ lazy_static! {
         "Number of waiting database requests"
     )
     .unwrap();
+
+    pub static ref TCP_PARTIAL_FRAMES_BUFFERED: Counter = register_counter!(
+        "tcp_partial_frames_buffered",
+        "Number of TCP reads buffered by the frame reassembly layer"
+    )
+    .unwrap();
+    pub static ref TCP_COMPLETE_FRAMES_DELIVERED: Counter = register_counter!(
+        "tcp_complete_frames_delivered",
+        "Number of complete TCP frames delivered by the reassembly layer"
+    )
+    .unwrap();
+    pub static ref TCP_FRAME_TOO_LARGE_ERRORS: Counter = register_counter!(
+        "tcp_frame_too_large_errors",
+        "Number of TCP frames rejected because their payload exceeded the configured maximum"
+    )
+    .unwrap();
+    pub static ref TCP_BUFFER_EXCEEDED_RESETS: Counter = register_counter!(
+        "tcp_buffer_exceeded_resets",
+        "Number of TCP connections reset because their reassembly buffer exceeded the configured maximum"
+    )
+    .unwrap();
 }
 
 pub fn record_ingestion(meter_id: &str, status: &str) {
@@ -77,6 +98,22 @@ pub fn set_db_waiting_requests(count: f64) {
 
 pub fn get_starvation_count() -> f64 {
     DB_POOL_STARVATION.get()
+}
+
+pub fn record_tcp_partial_frame_buffered() {
+    TCP_PARTIAL_FRAMES_BUFFERED.inc();
+}
+
+pub fn record_tcp_complete_frame_delivered() {
+    TCP_COMPLETE_FRAMES_DELIVERED.inc();
+}
+
+pub fn record_tcp_frame_too_large_error() {
+    TCP_FRAME_TOO_LARGE_ERRORS.inc();
+}
+
+pub fn record_tcp_buffer_exceeded_reset() {
+    TCP_BUFFER_EXCEEDED_RESETS.inc();
 }
 
 lazy_static! {

@@ -11,6 +11,13 @@
 
 pub mod acceptor;
 pub mod config;
+pub mod connection;
 pub mod connection_manager;
+pub mod errors;
 pub mod fd_monitor;
 pub mod rate_limiter;
+pub mod reassembly;
+
+pub use config::ReassemblyConfig;
+pub use errors::TransportError;
+pub use reassembly::FrameReassembler;
