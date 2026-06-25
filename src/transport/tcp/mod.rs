@@ -1,12 +1,3 @@
-pub mod acceptor;
-pub mod config;
-pub mod connection;
-pub mod errors;
-pub mod reassembly;
-
-pub use config::ReassemblyConfig;
-pub use errors::TransportError;
-pub use reassembly::FrameReassembler;
 //! Adaptive TCP connection lifecycle management for long-held meter sockets.
 //!
 //! See issue #53. The submodules cooperate to keep file-descriptor usage safely
@@ -20,6 +11,13 @@ pub use reassembly::FrameReassembler;
 
 pub mod acceptor;
 pub mod config;
+pub mod connection;
 pub mod connection_manager;
+pub mod errors;
 pub mod fd_monitor;
 pub mod rate_limiter;
+pub mod reassembly;
+
+pub use config::ReassemblyConfig;
+pub use errors::TransportError;
+pub use reassembly::FrameReassembler;
