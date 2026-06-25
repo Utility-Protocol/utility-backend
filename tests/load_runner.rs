@@ -261,7 +261,7 @@ async fn send_reading(
     let latency_micros = coordinated_omission_free_latency
         .as_micros()
         .min(u64::MAX as u128) as u64;
-    let _ = metrics.histogram.lock().await.record(latency_micros.max(1));
+    metrics.histogram.lock().await.record(latency_micros.max(1));
 
     match result {
         Ok(resp) if resp.status().is_success() => {
