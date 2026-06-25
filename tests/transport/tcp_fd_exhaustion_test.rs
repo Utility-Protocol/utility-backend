@@ -20,10 +20,10 @@ use utility_backend::transport::tcp::rate_limiter::ConnectionRateLimiter;
 /// client side is dropped (freeing its descriptor); the meter side is what the
 /// connection manager owns.
 async fn server_stream(listener: &TcpListener, addr: SocketAddr) -> TcpStream {
-    let (client, accepted) = tokio::join!(
-        async { TcpStream::connect(addr).await.unwrap() },
-        async { listener.accept().await.unwrap() }
-    );
+    let (client, accepted) =
+        tokio::join!(async { TcpStream::connect(addr).await.unwrap() }, async {
+            listener.accept().await.unwrap()
+        });
     drop(client);
     accepted.0
 }
@@ -185,7 +185,8 @@ async fn test_fd_exhaustion_is_mitigated() {
             "accept() must not fail with EMFILE under FD pressure"
         );
         let (server, _) = accepted.unwrap();
-        cm.register(format!("meter-{i}"), server, Priority::Low).await;
+        cm.register(format!("meter-{i}"), server, Priority::Low)
+            .await;
         drop(client);
 
         assert!(
@@ -200,7 +201,11 @@ async fn test_fd_exhaustion_is_mitigated() {
     let count_before = cm.active_count();
     let s = server_stream(&listener, addr).await;
     cm.register("meter-0".into(), s, Priority::Low).await;
-    assert_eq!(cm.active_count(), count_before, "re-register must not grow registry");
+    assert_eq!(
+        cm.active_count(),
+        count_before,
+        "re-register must not grow registry"
+    );
     assert!(
         current_fd_count().unwrap() <= before + 1,
         "re-register should not leak descriptors"

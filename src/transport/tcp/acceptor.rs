@@ -49,7 +49,8 @@ pub async fn read_meter_id(stream: &mut TcpStream) -> io::Result<MeterId> {
     }
     let mut buf = vec![0u8; len];
     stream.read_exact(&mut buf).await?;
-    String::from_utf8(buf).map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "meter id not UTF-8"))
+    String::from_utf8(buf)
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "meter id not UTF-8"))
 }
 
 /// Accept the next connection, applying rate limiting, identifying the meter and
@@ -78,6 +79,8 @@ pub async fn accept_and_register(
     };
 
     debug!(meter_id = %meter_id, %peer, "accepted meter connection");
-    let handle = cm.register(meter_id.clone(), stream, Priority::Normal).await;
+    let handle = cm
+        .register(meter_id.clone(), stream, Priority::Normal)
+        .await;
     Ok((meter_id, handle))
 }

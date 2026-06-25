@@ -192,7 +192,8 @@ impl ConnectionManager {
     /// Passing `Duration::ZERO` evicts everything past the configured idle
     /// timeout; a larger `min_idle` is more conservative.
     pub async fn evict_idle(&self, min_idle: Duration) -> usize {
-        self.evict_idle_exceeding(self.idle_timeout + min_idle).await
+        self.evict_idle_exceeding(self.idle_timeout + min_idle)
+            .await
     }
 
     /// Close every connection that has been idle for longer than `threshold`,
