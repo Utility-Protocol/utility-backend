@@ -66,6 +66,10 @@ path = "src/lib.rs"
 name = "parser_bench"
 harness = false
 
+[[bench]]
+name = "merkle_bench"
+harness = false
+
 
 
 [[bench]]
