@@ -1,0 +1,9 @@
+syntax = "proto3";
+package utility_backend.watermark;
+
+message HlcTimestamp { uint64 value = 1; }
+message WatermarkEntry { uint32 meter_source_id = 1; HlcTimestamp hlc = 2; uint64 acked_offset = 3; }
+message WatermarkVector { repeated WatermarkEntry entries = 1; uint64 epoch = 2; }
+message OffsetReconciliationRequest { uint32 meter_source_id = 1; uint64 start_offset = 2; uint64 end_offset = 3; }
+message OffsetReconciliationResponse { uint32 meter_source_id = 1; repeated uint64 event_ids = 2; }
+service WatermarkReconciliation { rpc ReconcileOffsets(stream OffsetReconciliationRequest) returns (stream OffsetReconciliationResponse); }
