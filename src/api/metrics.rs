@@ -1,6 +1,7 @@
 use lazy_static::lazy_static;
 use prometheus::{
-    register_counter_vec, register_gauge, register_histogram_vec, CounterVec, Gauge, HistogramVec,
+    register_counter, register_counter_vec, register_gauge, register_histogram,
+    register_histogram_vec, Counter, CounterVec, Gauge, Histogram, HistogramVec,
 };
 
 lazy_static! {
@@ -46,6 +47,26 @@ lazy_static! {
         "Number of waiting database requests"
     )
     .unwrap();
+    pub static ref COMPACTION_ATTEMPTS: Counter = register_counter!(
+        "utility_compaction_attempts_total",
+        "Total chunk compaction attempts"
+    )
+    .unwrap();
+    pub static ref COMPACTION_SKIPPED: Counter = register_counter!(
+        "utility_compaction_skipped_total",
+        "Total chunk compactions skipped due to hot chunk leases or lock contention"
+    )
+    .unwrap();
+    pub static ref COMPACTION_LOCK_CONTENTIONS: Counter = register_counter!(
+        "utility_compaction_lock_contentions_total",
+        "Total critical compaction lock contention alerts"
+    )
+    .unwrap();
+    pub static ref COMPACTION_DURATION_MS: Histogram = register_histogram!(
+        "utility_compaction_duration_ms",
+        "Chunk compaction duration in milliseconds"
+    )
+    .unwrap();
 }
 
 pub fn record_ingestion(meter_id: &str, status: &str) {
@@ -76,4 +97,20 @@ pub fn set_db_waiting_requests(count: f64) {
 
 pub fn get_starvation_count() -> f64 {
     DB_POOL_STARVATION.get()
+}
+
+pub fn record_compaction_attempt() {
+    COMPACTION_ATTEMPTS.inc();
+}
+
+pub fn record_compaction_skipped() {
+    COMPACTION_SKIPPED.inc();
+}
+
+pub fn record_compaction_lock_contention() {
+    COMPACTION_LOCK_CONTENTIONS.inc();
+}
+
+pub fn record_compaction_duration(duration_ms: f64) {
+    COMPACTION_DURATION_MS.observe(duration_ms);
 }
