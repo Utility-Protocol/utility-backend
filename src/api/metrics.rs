@@ -1,6 +1,7 @@
 use lazy_static::lazy_static;
 use prometheus::{
-    register_counter_vec, register_gauge, register_histogram_vec, CounterVec, Gauge, HistogramVec,
+    register_counter, register_counter_vec, register_gauge, register_histogram_vec, Counter,
+    CounterVec, Gauge, HistogramVec,
 };
 
 lazy_static! {
@@ -46,6 +47,27 @@ lazy_static! {
         "Number of waiting database requests"
     )
     .unwrap();
+
+    pub static ref TCP_PARTIAL_FRAMES_BUFFERED: Counter = register_counter!(
+        "tcp_partial_frames_buffered",
+        "Number of TCP reads buffered by the frame reassembly layer"
+    )
+    .unwrap();
+    pub static ref TCP_COMPLETE_FRAMES_DELIVERED: Counter = register_counter!(
+        "tcp_complete_frames_delivered",
+        "Number of complete TCP frames delivered by the reassembly layer"
+    )
+    .unwrap();
+    pub static ref TCP_FRAME_TOO_LARGE_ERRORS: Counter = register_counter!(
+        "tcp_frame_too_large_errors",
+        "Number of TCP frames rejected because their payload exceeded the configured maximum"
+    )
+    .unwrap();
+    pub static ref TCP_BUFFER_EXCEEDED_RESETS: Counter = register_counter!(
+        "tcp_buffer_exceeded_resets",
+        "Number of TCP connections reset because their reassembly buffer exceeded the configured maximum"
+    )
+    .unwrap();
 }
 
 pub fn record_ingestion(meter_id: &str, status: &str) {
@@ -76,6 +98,22 @@ pub fn set_db_waiting_requests(count: f64) {
 
 pub fn get_starvation_count() -> f64 {
     DB_POOL_STARVATION.get()
+}
+
+pub fn record_tcp_partial_frame_buffered() {
+    TCP_PARTIAL_FRAMES_BUFFERED.inc();
+}
+
+pub fn record_tcp_complete_frame_delivered() {
+    TCP_COMPLETE_FRAMES_DELIVERED.inc();
+}
+
+pub fn record_tcp_frame_too_large_error() {
+    TCP_FRAME_TOO_LARGE_ERRORS.inc();
+}
+
+pub fn record_tcp_buffer_exceeded_reset() {
+    TCP_BUFFER_EXCEEDED_RESETS.inc();
 }
 
 lazy_static! {
@@ -115,4 +153,61 @@ pub fn record_onchain_verification_gas_used(commodity_type: &str, gas_used: f64)
     ONCHAIN_VERIFICATION_GAS_USED
         .with_label_values(&[commodity_type])
         .observe(gas_used);
+}
+
+lazy_static! {
+    pub static ref FD_CURRENT_OPEN: Gauge = register_gauge!(
+        "utility_fd_current_open",
+        "Current number of open file descriptors for the process"
+    )
+    .unwrap();
+    pub static ref FD_SOFT_LIMIT: Gauge = register_gauge!(
+        "utility_fd_soft_limit",
+        "Soft file-descriptor limit (ratio of RLIMIT_NOFILE) for proactive reclamation"
+    )
+    .unwrap();
+    pub static ref FD_HARD_LIMIT: Gauge = register_gauge!(
+        "utility_fd_hard_limit",
+        "Hard file-descriptor limit (ratio of RLIMIT_NOFILE) triggering emergency reclamation"
+    )
+    .unwrap();
+    pub static ref FD_EVICTION_COUNT: Counter = register_counter!(
+        "utility_fd_eviction_count_total",
+        "Total connections evicted to reclaim file descriptors"
+    )
+    .unwrap();
+    pub static ref FD_CONNECTION_RESETS: Counter = register_counter!(
+        "utility_fd_connection_resets_total",
+        "Total stale meter connections reset (TCP RST) on reconnect"
+    )
+    .unwrap();
+    pub static ref TCP_ACTIVE_CONNECTIONS: Gauge = register_gauge!(
+        "utility_tcp_active_connections",
+        "Number of meter TCP connections currently tracked by the connection manager"
+    )
+    .unwrap();
+}
+
+pub fn set_fd_current_open(count: f64) {
+    FD_CURRENT_OPEN.set(count);
+}
+
+pub fn set_fd_soft_limit(limit: f64) {
+    FD_SOFT_LIMIT.set(limit);
+}
+
+pub fn set_fd_hard_limit(limit: f64) {
+    FD_HARD_LIMIT.set(limit);
+}
+
+pub fn inc_fd_eviction_count(by: u64) {
+    FD_EVICTION_COUNT.inc_by(by as f64);
+}
+
+pub fn inc_fd_connection_resets() {
+    FD_CONNECTION_RESETS.inc();
+}
+
+pub fn set_tcp_active_connections(count: f64) {
+    TCP_ACTIVE_CONNECTIONS.set(count);
 }
