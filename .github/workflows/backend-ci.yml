@@ -15,6 +15,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev
+
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -48,9 +51,16 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      soroban-rpc:
+        image: stellar/soroban-rpc:latest
+        ports:
+          - 8000:8000
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev postgresql-client
 
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -63,7 +73,11 @@ jobs:
 
       - name: Run database migrations
         run: |
-          PGPASSWORD=utility_secret psql -h localhost -U utility -d utility_test -f src/time_series/compress.sql 2>&1 || true
+          until pg_isready -h localhost -U utility; do
+            echo "Waiting for database..."
+            sleep 1
+          done
+          PGPASSWORD=utility_secret psql -h localhost -U utility -d utility_test -f src/time_series/compress.sql 2>&1
         env:
           PGPASSWORD: utility_secret
 
