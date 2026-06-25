@@ -1,7 +1,7 @@
 use lazy_static::lazy_static;
 use prometheus::{
-    register_counter, register_counter_vec, register_gauge, register_histogram_vec, Counter,
-    CounterVec, Gauge, HistogramVec,
+    register_counter, register_counter_vec, register_gauge, register_gauge_vec, register_histogram,
+    register_histogram_vec, Counter, CounterVec, Gauge, GaugeVec, Histogram, HistogramVec,
 };
 
 lazy_static! {
@@ -47,7 +47,26 @@ lazy_static! {
         "Number of waiting database requests"
     )
     .unwrap();
-
+    pub static ref COMPACTION_ATTEMPTS: Counter = register_counter!(
+        "utility_compaction_attempts_total",
+        "Total chunk compaction attempts"
+    )
+    .unwrap();
+    pub static ref COMPACTION_SKIPPED: Counter = register_counter!(
+        "utility_compaction_skipped_total",
+        "Total chunk compactions skipped due to hot chunk leases or lock contention"
+    )
+    .unwrap();
+    pub static ref COMPACTION_LOCK_CONTENTIONS: Counter = register_counter!(
+        "utility_compaction_lock_contentions_total",
+        "Total critical compaction lock contention alerts"
+    )
+    .unwrap();
+    pub static ref COMPACTION_DURATION_MS: Histogram = register_histogram!(
+        "utility_compaction_duration_ms",
+        "Chunk compaction duration in milliseconds"
+    )
+    .unwrap();
     pub static ref TCP_PARTIAL_FRAMES_BUFFERED: Counter = register_counter!(
         "tcp_partial_frames_buffered",
         "Number of TCP reads buffered by the frame reassembly layer"
@@ -100,6 +119,9 @@ pub fn get_starvation_count() -> f64 {
     DB_POOL_STARVATION.get()
 }
 
+pub fn record_compaction_attempt() {
+    COMPACTION_ATTEMPTS.inc();
+}
 pub fn record_tcp_partial_frame_buffered() {
     TCP_PARTIAL_FRAMES_BUFFERED.inc();
 }
@@ -137,22 +159,16 @@ lazy_static! {
     .unwrap();
 }
 
-pub fn record_merkle_tree_build_duration_ms(commodity_type: &str, duration_ms: f64) {
-    MERKLE_TREE_BUILD_DURATION_MS
-        .with_label_values(&[commodity_type])
-        .observe(duration_ms);
+pub fn record_compaction_skipped() {
+    COMPACTION_SKIPPED.inc();
 }
 
-pub fn record_batch_proof_submission(commodity_type: &str, status: &str) {
-    BATCH_PROOF_SUBMISSION_COUNT
-        .with_label_values(&[commodity_type, status])
-        .inc();
+pub fn record_compaction_lock_contention() {
+    COMPACTION_LOCK_CONTENTIONS.inc();
 }
 
-pub fn record_onchain_verification_gas_used(commodity_type: &str, gas_used: f64) {
-    ONCHAIN_VERIFICATION_GAS_USED
-        .with_label_values(&[commodity_type])
-        .observe(gas_used);
+pub fn record_compaction_duration(duration_ms: f64) {
+    COMPACTION_DURATION_MS.observe(duration_ms);
 }
 
 lazy_static! {
@@ -243,4 +259,59 @@ pub fn record_reconciliation_duration_ms(status: &str, duration_ms: f64) {
 
 pub fn inc_partition_seconds(seconds: u64) {
     PARTITION_SECONDS_TOTAL.inc_by(seconds as f64);
+    pub static ref POOL_CONNECTIONS_ACTIVE: GaugeVec = register_gauge_vec!(
+        "utility_pool_connections_active",
+        "Active connections per priority class",
+        &["class"]
+    )
+    .unwrap();
+    pub static ref POOL_CONNECTIONS_IDLE: GaugeVec = register_gauge_vec!(
+        "utility_pool_connections_idle",
+        "Idle connection slots per priority class",
+        &["class"]
+    )
+    .unwrap();
+    pub static ref POOL_WAIT_TIME_MS: HistogramVec = register_histogram_vec!(
+        "utility_pool_wait_time_ms",
+        "Connection acquisition wait time per priority class, in milliseconds",
+        &["class"]
+    )
+    .unwrap();
+    pub static ref POOL_PRIORITY_INHERITANCE_COUNT: Counter = register_counter!(
+        "utility_pool_priority_inheritance_count_total",
+        "Total priority-inheritance events (lower-priority slot lent to a higher-priority task)"
+    )
+    .unwrap();
+    pub static ref POOL_CLASS_STARVATION_EVENTS: CounterVec = register_counter_vec!(
+        "utility_pool_class_starvation_events_total",
+        "Total starvation events per priority class",
+        &["class"]
+    )
+    .unwrap();
+}
+
+pub fn set_pool_active(class: &str, count: f64) {
+    POOL_CONNECTIONS_ACTIVE
+        .with_label_values(&[class])
+        .set(count);
+}
+
+pub fn set_pool_idle(class: &str, count: f64) {
+    POOL_CONNECTIONS_IDLE.with_label_values(&[class]).set(count);
+}
+
+pub fn observe_pool_wait_ms(class: &str, wait_ms: f64) {
+    POOL_WAIT_TIME_MS
+        .with_label_values(&[class])
+        .observe(wait_ms);
+}
+
+pub fn inc_priority_inheritance() {
+    POOL_PRIORITY_INHERITANCE_COUNT.inc();
+}
+
+pub fn inc_pool_starvation(class: &str) {
+    POOL_CLASS_STARVATION_EVENTS
+        .with_label_values(&[class])
+        .inc();
 }
