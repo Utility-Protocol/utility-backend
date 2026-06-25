@@ -166,7 +166,6 @@ pub fn current_fd_count() -> io::Result<u64> {
 ///
 /// `rlim_t` is `u64` on Linux but its width varies across Unix targets, so the
 /// `as u64` conversion below is a no-op on some and widening on others.
-#[allow(clippy::unnecessary_cast)]
 pub fn rlimit_nofile() -> io::Result<u64> {
     #[cfg(unix)]
     {
@@ -179,6 +178,7 @@ pub fn rlimit_nofile() -> io::Result<u64> {
         if rc != 0 {
             return Err(io::Error::last_os_error());
         }
+        #[allow(clippy::unnecessary_cast)]
         Ok(rl.rlim_cur as u64)
     }
     #[cfg(not(unix))]
