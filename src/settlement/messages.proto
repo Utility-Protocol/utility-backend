@@ -1,0 +1,37 @@
+// Canonical schema for cross-shard settlement flow-control messages (issue #54).
+//
+// NOTE: This file documents the wire contract. The Rust implementation in
+// `messages.rs` mirrors these definitions with a hand-rolled little-endian codec
+// so the build does not require a `protoc`/`prost` toolchain. If a protobuf
+// backend is introduced, generate from this file and keep the field numbers and
+// struct layout in sync with `messages.rs`.
+
+syntax = "proto3";
+
+package utility.settlement.v1;
+
+// A single settlement payload routed from one shard to another.
+message SettlementMessage {
+  // Destination shard this message is addressed to.
+  uint64 shard_id = 1;
+  // Monotonic per-stream sequence id (basis for dedup + ack).
+  uint64 msg_id = 2;
+  // Opaque settlement payload (avg 256 B, max 4 KB).
+  bytes payload = 3;
+}
+
+// Credit replenishment sent by the receiver after processing a batch.
+message CreditGrant {
+  // Shard the grant is addressed to (the original sender).
+  uint64 shard_id = 1;
+  // Number of additional credits granted.
+  uint32 delta = 2;
+}
+
+// Acknowledgement carrying the highest contiguous accepted msg_id.
+message AckMessage {
+  // Shard the ack is addressed to (the original sender).
+  uint64 shard_id = 1;
+  // Highest contiguous accepted msg_id.
+  uint64 acked_msg_id = 2;
+}
