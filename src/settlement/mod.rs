@@ -1,4 +1,8 @@
 pub mod attestation_verifier;
+pub mod credit_flow;
+pub mod executor;
 pub mod merkle;
+pub mod messages;
 pub mod queue;
+pub mod shard_router;
 pub mod submitter;
