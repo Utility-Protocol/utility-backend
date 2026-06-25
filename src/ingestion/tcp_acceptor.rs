@@ -40,7 +40,11 @@ impl TcpAcceptRingSink {
         }
     }
 
-    pub fn overflow_len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.overflow.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.overflow.is_empty()
     }
 }
