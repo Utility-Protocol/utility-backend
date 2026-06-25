@@ -17,6 +17,7 @@ pub async fn build_router(state: AppState) -> anyhow::Result<Router> {
         .route("/api/v1/meters", get(handlers::list_meters))
         .route("/api/v1/meters/:id", get(handlers::get_meter))
         .route("/api/v1/tariffs", get(handlers::list_tariffs))
+        .route("/api/v1/tariffs/explain", get(handlers::explain_tariff))
         .route("/api/v1/readings", post(handlers::submit_reading))
         .route("/api/v1/settle", post(handlers::settle_account))
         .route(
@@ -30,10 +31,7 @@ pub async fn build_router(state: AppState) -> anyhow::Result<Router> {
         .route("/api/v1/meters/register", post(handlers::register_meter))
         .route("/api/v1/meters/rotate-key", post(handlers::rotate_key))
         .route("/api/v1/nonce/status", get(handlers::nonce_status))
-        .route(
-            "/api/v1/soroban/circuit",
-            get(handlers::soroban_circuit_status),
-        )
+        .route("/api/v1/gateway/locks", get(handlers::list_gateway_locks))
         .route("/metrics", get(handlers::metrics_handler))
         .route(
             "/api/v1/database/compression/status",

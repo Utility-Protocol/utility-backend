@@ -1,4 +1,5 @@
-use crate::soroban::{rpc::CircuitBreaker, sequencer::NonceSequencer};
+use crate::gateway::lock::AdvisoryLock;
+use crate::soroban::sequencer::NonceSequencer;
 use axum::extract::FromRef;
 use sqlx::{Pool, Postgres};
 use std::sync::Arc;
@@ -14,7 +15,7 @@ pub mod router;
 pub struct AppState {
     pub sequencer: Arc<NonceSequencer>,
     pub db_pool: Pool<Postgres>,
-    pub soroban_circuit_breaker: Arc<Mutex<CircuitBreaker>>,
+    pub advisory_lock: Arc<AdvisoryLock>,
 }
 
 impl FromRef<AppState> for Arc<NonceSequencer> {
@@ -29,8 +30,8 @@ impl FromRef<AppState> for Pool<Postgres> {
     }
 }
 
-impl FromRef<AppState> for Arc<Mutex<CircuitBreaker>> {
+impl FromRef<AppState> for Arc<AdvisoryLock> {
     fn from_ref(state: &AppState) -> Self {
-        state.soroban_circuit_breaker.clone()
+        state.advisory_lock.clone()
     }
 }
