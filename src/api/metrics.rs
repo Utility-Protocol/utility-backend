@@ -1,6 +1,7 @@
 use lazy_static::lazy_static;
 use prometheus::{
-    register_counter_vec, register_gauge, register_histogram_vec, CounterVec, Gauge, HistogramVec,
+    register_counter, register_counter_vec, register_gauge, register_histogram_vec, Counter,
+    CounterVec, Gauge, HistogramVec,
 };
 
 lazy_static! {
@@ -76,4 +77,100 @@ pub fn set_db_waiting_requests(count: f64) {
 
 pub fn get_starvation_count() -> f64 {
     DB_POOL_STARVATION.get()
+}
+
+lazy_static! {
+    pub static ref MERKLE_TREE_BUILD_DURATION_MS: HistogramVec = register_histogram_vec!(
+        "utility_merkle_tree_build_duration_ms",
+        "Merkle tree construction duration in milliseconds",
+        &["commodity_type"]
+    )
+    .unwrap();
+    pub static ref BATCH_PROOF_SUBMISSION_COUNT: CounterVec = register_counter_vec!(
+        "utility_batch_proof_submission_count_total",
+        "Total number of Merkle batch proof submissions",
+        &["commodity_type", "status"]
+    )
+    .unwrap();
+    pub static ref ONCHAIN_VERIFICATION_GAS_USED: HistogramVec = register_histogram_vec!(
+        "utility_onchain_verification_gas_used",
+        "Soroban on-chain Merkle batch verification gas used",
+        &["commodity_type"]
+    )
+    .unwrap();
+}
+
+pub fn record_merkle_tree_build_duration_ms(commodity_type: &str, duration_ms: f64) {
+    MERKLE_TREE_BUILD_DURATION_MS
+        .with_label_values(&[commodity_type])
+        .observe(duration_ms);
+}
+
+pub fn record_batch_proof_submission(commodity_type: &str, status: &str) {
+    BATCH_PROOF_SUBMISSION_COUNT
+        .with_label_values(&[commodity_type, status])
+        .inc();
+}
+
+pub fn record_onchain_verification_gas_used(commodity_type: &str, gas_used: f64) {
+    ONCHAIN_VERIFICATION_GAS_USED
+        .with_label_values(&[commodity_type])
+        .observe(gas_used);
+}
+
+lazy_static! {
+    pub static ref FD_CURRENT_OPEN: Gauge = register_gauge!(
+        "utility_fd_current_open",
+        "Current number of open file descriptors for the process"
+    )
+    .unwrap();
+    pub static ref FD_SOFT_LIMIT: Gauge = register_gauge!(
+        "utility_fd_soft_limit",
+        "Soft file-descriptor limit (ratio of RLIMIT_NOFILE) for proactive reclamation"
+    )
+    .unwrap();
+    pub static ref FD_HARD_LIMIT: Gauge = register_gauge!(
+        "utility_fd_hard_limit",
+        "Hard file-descriptor limit (ratio of RLIMIT_NOFILE) triggering emergency reclamation"
+    )
+    .unwrap();
+    pub static ref FD_EVICTION_COUNT: Counter = register_counter!(
+        "utility_fd_eviction_count_total",
+        "Total connections evicted to reclaim file descriptors"
+    )
+    .unwrap();
+    pub static ref FD_CONNECTION_RESETS: Counter = register_counter!(
+        "utility_fd_connection_resets_total",
+        "Total stale meter connections reset (TCP RST) on reconnect"
+    )
+    .unwrap();
+    pub static ref TCP_ACTIVE_CONNECTIONS: Gauge = register_gauge!(
+        "utility_tcp_active_connections",
+        "Number of meter TCP connections currently tracked by the connection manager"
+    )
+    .unwrap();
+}
+
+pub fn set_fd_current_open(count: f64) {
+    FD_CURRENT_OPEN.set(count);
+}
+
+pub fn set_fd_soft_limit(limit: f64) {
+    FD_SOFT_LIMIT.set(limit);
+}
+
+pub fn set_fd_hard_limit(limit: f64) {
+    FD_HARD_LIMIT.set(limit);
+}
+
+pub fn inc_fd_eviction_count(by: u64) {
+    FD_EVICTION_COUNT.inc_by(by as f64);
+}
+
+pub fn inc_fd_connection_resets() {
+    FD_CONNECTION_RESETS.inc();
+}
+
+pub fn set_tcp_active_connections(count: f64) {
+    TCP_ACTIVE_CONNECTIONS.set(count);
 }

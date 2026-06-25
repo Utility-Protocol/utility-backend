@@ -11,6 +11,8 @@ use utility_backend::time_series::compression::{
     init_global_compression_manager, spawn_compression_monitor, CompressionPolicy,
     CompressionPolicyManager,
 };
+use utility_backend::transport::lib::spawn_transport_monitors;
+use utility_backend::transport::tcp::config::TcpTransportConfig;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -44,6 +46,10 @@ async fn main() -> anyhow::Result<()> {
     ));
     init_global_compression_manager(compression_manager.clone());
     spawn_compression_monitor(compression_manager, Duration::from_secs(60));
+
+    // Start the adaptive TCP connection lifecycle manager and FD monitor so
+    // long-held meter sockets cannot exhaust the process descriptor budget.
+    let _transport = spawn_transport_monitors(TcpTransportConfig::default());
 
     let advisory_lock = Arc::new(AdvisoryLock::postgres(db_pool.clone()));
     let rate_limiter = Arc::new(DynamicRateLimiter::new());

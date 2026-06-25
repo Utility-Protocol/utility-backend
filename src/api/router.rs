@@ -34,6 +34,10 @@ pub async fn build_router(state: AppState) -> anyhow::Result<Router> {
         .route("/api/v1/gateway/locks", get(handlers::list_gateway_locks))
         .route("/metrics", get(handlers::metrics_handler))
         .route(
+            "/api/v1/telemetry/trace/:trace_id",
+            get(crate::gateway::telemetry::get_trace),
+        )
+        .route(
             "/api/v1/database/compression/status",
             get(handlers::compression_status),
         )
