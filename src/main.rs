@@ -4,6 +4,7 @@ use std::time::Duration;
 use tracing_subscriber::EnvFilter;
 
 use utility_backend::api::AppState;
+use utility_backend::gateway::lock::AdvisoryLock;
 use utility_backend::soroban::sequencer::NonceSequencer;
 use utility_backend::time_series::compression::{
     init_global_compression_manager, spawn_compression_monitor, CompressionPolicy,
@@ -43,7 +44,12 @@ async fn main() -> anyhow::Result<()> {
     init_global_compression_manager(compression_manager.clone());
     spawn_compression_monitor(compression_manager, Duration::from_secs(60));
 
-    let state = AppState { sequencer, db_pool };
+    let advisory_lock = Arc::new(AdvisoryLock::postgres(db_pool.clone()));
+    let state = AppState {
+        sequencer,
+        db_pool,
+        advisory_lock,
+    };
 
     let app = utility_backend::api::router::build_router(state).await?;
 
