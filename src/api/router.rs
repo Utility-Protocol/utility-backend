@@ -31,6 +31,7 @@ pub async fn build_router(state: AppState) -> anyhow::Result<Router> {
         .route("/api/v1/meters/rotate-key", post(handlers::rotate_key))
         .route("/api/v1/nonce/status", get(handlers::nonce_status))
         .route("/metrics", get(handlers::metrics_handler))
+        .route("/debug/clock_state", get(handlers::clock_state))
         .route(
             "/api/v1/database/compression/status",
             get(handlers::compression_status),
