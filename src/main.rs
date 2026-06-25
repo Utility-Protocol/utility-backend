@@ -4,6 +4,7 @@ use std::time::Duration;
 use tracing_subscriber::EnvFilter;
 
 use utility_backend::api::AppState;
+use utility_backend::api::middleware::DynamicRateLimiter;
 use utility_backend::gateway::lock::AdvisoryLock;
 use utility_backend::soroban::sequencer::NonceSequencer;
 use utility_backend::time_series::compression::{
@@ -51,10 +52,12 @@ async fn main() -> anyhow::Result<()> {
     let _transport = spawn_transport_monitors(TcpTransportConfig::default());
 
     let advisory_lock = Arc::new(AdvisoryLock::postgres(db_pool.clone()));
+    let rate_limiter = DynamicRateLimiter::new();
     let state = AppState {
         sequencer,
         db_pool,
         advisory_lock,
+        rate_limiter,
     };
 
     let app = utility_backend::api::router::build_router(state).await?;
@@ -64,7 +67,7 @@ async fn main() -> anyhow::Result<()> {
 
     axum::serve(
         tokio::net::TcpListener::bind(addr).await?,
-        app.into_make_service(),
+        app.into_make_service_with_connect_info::<SocketAddr>(),
     )
     .await?;
 
