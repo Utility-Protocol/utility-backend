@@ -1,6 +1,6 @@
+use crate::api::middleware::DynamicRateLimiter;
 use crate::gateway::lock::AdvisoryLock;
 use crate::soroban::sequencer::NonceSequencer;
-use crate::api::middleware::DynamicRateLimiter;
 use axum::extract::FromRef;
 use sqlx::{Pool, Postgres};
 use std::sync::Arc;
