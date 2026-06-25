@@ -4,3 +4,4 @@
 //! credit-flow protocol (see [`durable_queue`]).
 
 pub mod durable_queue;
+pub mod reorg_log;
