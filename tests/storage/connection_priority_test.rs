@@ -80,12 +80,10 @@ async fn test_max_cap_backpressure() {
         .unwrap(); // floating
     assert_eq!(pool.inner().active(Priority::Critical), 2); // at max
 
-    // Third exceeds Critical's max of 2 -> backpressure.
-    let err = pool
-        .get_with_timeout(Priority::Critical, short)
-        .await
-        .unwrap_err();
-    assert!(matches!(err, PoolError::Exhausted { .. }));
+    // Third exceeds Critical's max of 2 -> backpressure. (Matched on the
+    // `Result` directly: `unwrap_err` would require `PoolPermit: Debug`.)
+    let result = pool.get_with_timeout(Priority::Critical, short).await;
+    assert!(matches!(result, Err(PoolError::Exhausted { .. })));
 }
 
 #[tokio::test]
