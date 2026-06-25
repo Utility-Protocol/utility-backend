@@ -14,7 +14,7 @@ const HEADER_SIZE: usize = 64;
 const FULL_SPIN_BUDGET: Duration = Duration::from_nanos(100);
 
 #[repr(C, align(16))]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MeterEvent {
     pub meter_id: u64,
     pub timestamp_ns: u64,
@@ -22,6 +22,19 @@ pub struct MeterEvent {
     reserved_align: [u8; 15],
     pub scaled_value: i128,
     pub reserved: [u8; 80],
+}
+
+impl Default for MeterEvent {
+    fn default() -> Self {
+        Self {
+            meter_id: 0,
+            timestamp_ns: 0,
+            commodity: 0,
+            reserved_align: [0; 15],
+            scaled_value: 0,
+            reserved: [0; 80],
+        }
+    }
 }
 
 impl MeterEvent {
@@ -72,7 +85,7 @@ pub enum TryPushError {
 }
 
 pub struct SharedRingBuffer {
-    mmap: MmapMut,
+    _mmap: MmapMut,
     header: NonNull<RingBufHeader>,
     slots: NonNull<MeterEventSlot>,
     capacity: usize,
@@ -151,6 +164,10 @@ impl SharedRingBuffer {
         tail.wrapping_sub(head) as usize
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn capacity(&self) -> usize {
         self.capacity
     }
@@ -169,7 +186,7 @@ impl SharedRingBuffer {
             return Err(RingBufferError::MappingTooSmall);
         }
         Ok(Self {
-            mmap,
+            _mmap: mmap,
             header,
             slots,
             capacity,
