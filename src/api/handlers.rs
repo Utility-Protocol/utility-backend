@@ -164,6 +164,24 @@ pub async fn metrics_handler() -> impl IntoResponse {
     (headers, buffer)
 }
 
+#[derive(Serialize)]
+pub struct ClockStateResponse {
+    pub offset_seconds: f64,
+    pub estimated_drift_ppm: f64,
+    pub last_ntp_rtt_ms: Option<f64>,
+    pub correction_ns: i64,
+}
+
+pub async fn clock_state() -> Json<ClockStateResponse> {
+    let state = crate::ingestion::drift_estimator::KalmanClockState::default();
+    Json(ClockStateResponse {
+        offset_seconds: state.offset_seconds,
+        estimated_drift_ppm: state.drift_ppm(),
+        last_ntp_rtt_ms: state.last_rtt_ms,
+        correction_ns: state.correction_ns(),
+    })
+}
+
 pub async fn readyz_handler() -> StatusCode {
     let starvation = metrics::get_starvation_count();
     if starvation > 100.0 {
