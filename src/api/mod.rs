@@ -3,7 +3,6 @@ use crate::soroban::sequencer::NonceSequencer;
 use axum::extract::FromRef;
 use sqlx::{Pool, Postgres};
 use std::sync::Arc;
-use tokio::sync::Mutex;
 
 pub mod alloc_tracker;
 pub mod handlers;

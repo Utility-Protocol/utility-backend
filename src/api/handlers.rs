@@ -6,7 +6,6 @@ use hex;
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Postgres};
 use std::sync::Arc;
-use tokio::sync::Mutex;
 
 use crate::api::metrics;
 use crate::gateway::crypto::global_registry;
