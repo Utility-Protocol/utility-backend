@@ -3897,6 +3897,7 @@ dependencies = [
  "proptest",
  "rand 0.8.6",
  "reqwest",
+ "ring",
  "rustls 0.22.4",
  "rustls-pemfile 2.2.0",
  "serde",
