@@ -42,7 +42,8 @@ pub async fn build_router(state: AppState) -> anyhow::Result<Router> {
             "/api/v1/database/compression/status",
             get(handlers::compression_status),
         )
-        .layer(axum_mw::from_fn(crate::api::middleware::rate_limit_layer))
+        .route("/api/v1/rate-limiter/status", get(handlers::rate_limiter_status))
+        .layer(axum_mw::from_fn_with_state(state.clone(), crate::api::middleware::rate_limit_layer))
         .layer(axum_mw::from_fn(
             crate::gateway::telemetry::tracing_middleware,
         ))
