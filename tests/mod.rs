@@ -1,5 +1,5 @@
 pub mod api_tests;
-pub mod blockchain;
+pub mod gateway;
 pub mod gateway_tests;
 pub mod memory;
 pub mod settlement;
