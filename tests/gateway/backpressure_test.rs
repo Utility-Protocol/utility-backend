@@ -85,7 +85,7 @@ fn test_spill_and_drain_recovers_all() {
 
     let mut recovered = 0;
     // Drain by alternating pops (free memory) and spill replays.
-    while filter.len() > 0 || filter.stats().spill_backlog > 0 {
+    while !filter.is_empty() || filter.stats().spill_backlog > 0 {
         filter.drain_spill().unwrap();
         if filter.pop().is_some() {
             recovered += 1;
