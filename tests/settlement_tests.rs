@@ -1,9 +1,9 @@
+use sha2::Digest;
 use std::sync::Arc;
 use tokio::sync::{Barrier, Mutex};
 use utility_backend::settlement::finalizer::Finalizer;
 use utility_backend::settlement::mint_queue::MintQueue;
 use utility_backend::soroban::rpc::CircuitBreaker;
-use sha2::Digest;
 
 #[tokio::test]
 async fn test_concurrent_finalization_deduplication() {
@@ -19,18 +19,31 @@ async fn test_concurrent_finalization_deduplication() {
     };
 
     // Clean up
-    sqlx::query("DELETE FROM processed_mints").execute(&pool).await.unwrap();
-    sqlx::query("DELETE FROM pending_mints").execute(&pool).await.unwrap();
+    sqlx::query("DELETE FROM processed_mints")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM pending_mints")
+        .execute(&pool)
+        .await
+        .unwrap();
 
     let batch_id = "test-batch-123";
     let resource_type = "water";
     let destination = "GABC...123";
 
     let mint_queue = MintQueue::new(pool.clone());
-    mint_queue.enqueue(batch_id, resource_type, 100.0, destination).await.unwrap();
+    mint_queue
+        .enqueue(batch_id, resource_type, 100.0, destination)
+        .await
+        .unwrap();
 
     let breaker = Arc::new(Mutex::new(CircuitBreaker::new(5)));
-    let finalizer = Arc::new(Finalizer::new(pool.clone(), "http://invalid-rpc-url".into(), breaker));
+    let finalizer = Arc::new(Finalizer::new(
+        pool.clone(),
+        "http://invalid-rpc-url".into(),
+        breaker,
+    ));
 
     let num_threads = 5;
     let barrier = Arc::new(Barrier::new(num_threads));
@@ -69,15 +82,27 @@ async fn test_aggregation_of_pending_mints() {
         }
     };
 
-    sqlx::query("DELETE FROM processed_mints").execute(&pool).await.unwrap();
-    sqlx::query("DELETE FROM pending_mints").execute(&pool).await.unwrap();
+    sqlx::query("DELETE FROM processed_mints")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM pending_mints")
+        .execute(&pool)
+        .await
+        .unwrap();
 
     let batch_id = "batch-agg";
     let resource_type = "energy";
     let mint_queue = MintQueue::new(pool.clone());
 
-    mint_queue.enqueue(batch_id, resource_type, 40.0, "dest1").await.unwrap();
-    mint_queue.enqueue(batch_id, resource_type, 60.0, "dest1").await.unwrap();
+    mint_queue
+        .enqueue(batch_id, resource_type, 40.0, "dest1")
+        .await
+        .unwrap();
+    mint_queue
+        .enqueue(batch_id, resource_type, 60.0, "dest1")
+        .await
+        .unwrap();
 
     let breaker = Arc::new(Mutex::new(CircuitBreaker::new(5)));
     let finalizer = Finalizer::new(pool.clone(), "http://invalid-rpc-url".into(), breaker);

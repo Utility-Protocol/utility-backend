@@ -1,11 +1,11 @@
-use sqlx::{PgPool, Postgres, Transaction};
-use sha2::{Sha256, Digest};
-use hex;
-use tracing::{info, warn};
-use tokio::sync::Mutex;
-use std::sync::Arc;
-use crate::soroban::rpc::CircuitBreaker;
 use crate::settlement::mint_queue::MintQueue;
+use crate::soroban::rpc::CircuitBreaker;
+use hex;
+use sha2::{Digest, Sha256};
+use sqlx::{PgPool, Postgres, Transaction};
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use tracing::{info, warn};
 
 pub struct Finalizer {
     pool: PgPool,
@@ -17,10 +17,19 @@ pub struct Finalizer {
 impl Finalizer {
     pub fn new(pool: PgPool, rpc_url: String, breaker: Arc<Mutex<CircuitBreaker>>) -> Self {
         let mint_queue = MintQueue::new(pool.clone());
-        Self { pool, rpc_url, mint_queue, breaker }
+        Self {
+            pool,
+            rpc_url,
+            mint_queue,
+            breaker,
+        }
     }
 
-    pub async fn finalize_mint(&self, batch_id: &str, resource_type: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn finalize_mint(
+        &self,
+        batch_id: &str,
+        resource_type: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // 1. Generate idempotency key: SHA256(batch_id || resource_type || 'mint')
         let mut hasher = Sha256::new();
         hasher.update(batch_id);
@@ -37,7 +46,7 @@ impl Finalizer {
             VALUES ($1, $2, $3)
             ON CONFLICT (batch_id, resource_type) DO NOTHING
             RETURNING id
-            "#
+            "#,
         )
         .bind(batch_id)
         .bind(resource_type)
@@ -53,7 +62,8 @@ impl Finalizer {
 
         // 3. Get pending mints for this batch and resource type
         let pending = self.mint_queue.get_pending(batch_id).await?;
-        let filtered_pending: Vec<_> = pending.into_iter()
+        let filtered_pending: Vec<_> = pending
+            .into_iter()
             .filter(|e| e.resource_type == resource_type)
             .collect();
 
