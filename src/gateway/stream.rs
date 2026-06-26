@@ -1,3 +1,4 @@
+use crate::ingestion::tai64n::Tai64N;
 use bytes::Bytes;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -5,7 +6,8 @@ use tracing::{info, warn};
 
 pub struct MeterEvent {
     pub meter_id: String,
-    pub timestamp: i64,
+    pub timestamp_tai: Tai64N,
+    pub correction_ns: i64,
     pub reading: f64,
     pub token_volume: u64,
 }
@@ -47,7 +49,8 @@ pub async fn ingest_stream(
                 info!(len = data.len(), "received meter datagram");
                 let event = MeterEvent {
                     meter_id: String::from("unknown"),
-                    timestamp: chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0),
+                    timestamp_tai: Tai64N::now_with_correction(0),
+                    correction_ns: 0,
                     reading: 0.0,
                     token_volume: 0,
                 };

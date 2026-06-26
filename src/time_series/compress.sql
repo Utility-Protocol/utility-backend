@@ -54,3 +54,63 @@ $$;
 -- Composite index for efficient per-meter time-range queries
 CREATE INDEX IF NOT EXISTS idx_meter_readings_meter_id_ts
     ON meter_readings (meter_id, recorded_at DESC);
+
+-- Telemetry events table with per-meter monotonic sequencing
+CREATE TABLE IF NOT EXISTS telemetry_events (
+    id BIGSERIAL PRIMARY KEY,
+    meter_id TEXT NOT NULL,
+    resource_type TEXT NOT NULL DEFAULT 'electricity',
+    recorded_at TIMESTAMPTZ NOT NULL,
+    reading DOUBLE PRECISION NOT NULL,
+    sequence INTEGER NOT NULL,
+    UNIQUE(meter_id, sequence)
+);
+
+CREATE TABLE IF NOT EXISTS materialization_state (
+    name TEXT PRIMARY KEY,
+    high_watermark BIGINT NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS materialization_pending (
+    batch_id UUID PRIMARY KEY,
+    lower_watermark BIGINT NOT NULL,
+    upper_watermark BIGINT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('staging', 'committed')),
+    started_at TIMESTAMPTZ NOT NULL,
+    committed_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_materialization_pending_staging
+    ON materialization_pending (started_at ASC)
+    WHERE status = 'staging';
+
+CREATE TABLE IF NOT EXISTS materialization_checkpoint (
+    batch_id UUID PRIMARY KEY,
+    new_watermark BIGINT NOT NULL,
+    started_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS materialized_hourly_usage (
+    hour TIMESTAMPTZ NOT NULL,
+    resource_type TEXT NOT NULL,
+    usage DOUBLE PRECISION NOT NULL DEFAULT 0,
+    PRIMARY KEY (hour, resource_type)
+);
+
+-- Index for efficient sequence-based retrieval by the tariff engine
+CREATE INDEX IF NOT EXISTS idx_telemetry_events_meter_id_sequence
+    ON telemetry_events (meter_id, sequence ASC);
+
+CREATE INDEX IF NOT EXISTS idx_telemetry_events_id
+    ON telemetry_events (id ASC);
+
+-- Hypertable setup for telemetry_events (if TimescaleDB is present)
+DO $$
+BEGIN
+    PERFORM * FROM pg_extension WHERE extname = 'timescaledb';
+    IF FOUND THEN
+        PERFORM create_hypertable('telemetry_events', 'recorded_at', if_not_exists => TRUE);
+    END IF;
+END
+$$;

@@ -9,7 +9,8 @@ async fn test_backpressure_filter_roundtrip() {
     let (filter, mut rx) = BackpressureFilter::new(1024);
     let event = MeterEvent {
         meter_id: "MTR-TEST".into(),
-        timestamp: 1700000000,
+        timestamp_tai: utility_backend::ingestion::tai64n::Tai64N::from_unix_ms(1_700_000_000, 0),
+        correction_ns: 0,
         reading: 240.5,
         token_volume: 1000,
     };
@@ -62,4 +63,27 @@ fn test_crypto_verify_hardware_meter() {
     let payload = b"flow_rate:15.7;pressure:42.3";
     let signature = signing_key.sign(payload);
     assert!(verify_packet(&identity, payload, &signature.to_bytes()).is_ok());
+}
+
+#[tokio::test]
+async fn test_advisory_lock_reports_fencing_token_and_active_lease() {
+    let lock = AdvisoryLock::new();
+    let outcome = lock
+        .lock_with_fencing("resource:electric:active", |token| {
+            let lock = lock.clone();
+            async move {
+                let active = lock.active_locks();
+                assert_eq!(token, 1);
+                assert_eq!(active.len(), 1);
+                assert_eq!(active[0].resource, "resource:electric:active");
+                assert_eq!(active[0].fencing_token, token);
+                42_u64
+            }
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(outcome.fencing_token, 1);
+    assert_eq!(outcome.value, 42);
+    assert!(lock.active_locks().is_empty());
 }

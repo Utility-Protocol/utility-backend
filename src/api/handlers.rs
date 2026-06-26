@@ -1,15 +1,24 @@
-use axum::{extract::Path, extract::State, http::StatusCode, response::IntoResponse, Json};
+use axum::{
+    extract::Path, extract::Query, extract::State, http::StatusCode, response::IntoResponse, Json,
+};
 use ed25519_dalek::VerifyingKey;
 use hex;
 use serde::{Deserialize, Serialize};
 
 use crate::api::AppState;
 
+use sqlx::{Pool, Postgres};
+use std::sync::Arc;
+
 use crate::api::metrics;
 use crate::gateway::crypto::global_registry;
+use crate::gateway::lock::{ActiveLock, AdvisoryLock};
+use crate::soroban::sequencer::NonceSequencer;
+use crate::tariffs::engine::{global_tariff_engine, TariffContext, TariffExplanation};
 use crate::time_series::analytics::{global_engine, DiagnosticReport};
 use crate::time_series::compression::CompressionStatus;
 use crate::time_series::drift::CalibrationResult;
+use crate::time_series::ingestion::ingest_telemetry;
 
 #[derive(Serialize)]
 pub struct MeterInfo {
@@ -54,6 +63,10 @@ pub async fn nonce_status(
     Json(statuses)
 }
 
+pub async fn list_gateway_locks(State(lock): State<Arc<AdvisoryLock>>) -> Json<Vec<ActiveLock>> {
+    Json(lock.active_locks())
+}
+
 pub async fn list_meters() -> Json<Vec<MeterInfo>> {
     Json(vec![MeterInfo {
         id: "MTR-001".into(),
@@ -72,6 +85,34 @@ pub async fn get_meter(Path(id): Path<String>) -> Json<MeterInfo> {
     })
 }
 
+#[derive(Deserialize)]
+pub struct TariffExplainQuery {
+    pub meter_id: String,
+    pub ts: String,
+    pub volume: Option<f64>,
+    pub consumption_tier: Option<String>,
+    pub grid_congestion_level: Option<u8>,
+    pub is_holiday: Option<bool>,
+}
+
+pub async fn explain_tariff(
+    Query(query): Query<TariffExplainQuery>,
+) -> Result<Json<TariffExplanation>, StatusCode> {
+    let timestamp = chrono::DateTime::parse_from_rfc3339(&query.ts)
+        .map_err(|_| StatusCode::BAD_REQUEST)?
+        .with_timezone(&chrono::Utc);
+    let context = TariffContext {
+        meter_id: query.meter_id,
+        timestamp,
+        volume: query.volume.unwrap_or(1.0),
+        consumption_tier: query.consumption_tier,
+        grid_congestion_level: query.grid_congestion_level,
+        is_holiday: query.is_holiday.unwrap_or(false),
+    };
+
+    Ok(Json(global_tariff_engine().explain(context)))
+}
+
 pub async fn list_tariffs() -> Json<Vec<&'static str>> {
     Json(vec![
         "peak:0.15/kWh",
@@ -80,8 +121,21 @@ pub async fn list_tariffs() -> Json<Vec<&'static str>> {
     ])
 }
 
-pub async fn submit_reading(Json(_body): Json<ReadingSubmission>) -> Json<&'static str> {
-    Json("reading accepted")
+pub async fn submit_reading(
+    State(pool): State<Pool<Postgres>>,
+    Json(body): Json<ReadingSubmission>,
+) -> Result<Json<&'static str>, StatusCode> {
+    let recorded_at = chrono::DateTime::parse_from_rfc3339(&body.timestamp)
+        .map(|dt| dt.with_timezone(&chrono::Utc))
+        .unwrap_or_else(|_| chrono::Utc::now());
+
+    match ingest_telemetry(&pool, &body.meter_id, body.value, recorded_at).await {
+        Ok(_) => Ok(Json("reading accepted")),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to ingest reading");
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
 }
 
 pub async fn settle_account(
@@ -143,6 +197,24 @@ pub async fn metrics_handler() -> impl IntoResponse {
     (headers, buffer)
 }
 
+#[derive(Serialize)]
+pub struct ClockStateResponse {
+    pub offset_seconds: f64,
+    pub estimated_drift_ppm: f64,
+    pub last_ntp_rtt_ms: Option<f64>,
+    pub correction_ns: i64,
+}
+
+pub async fn clock_state() -> Json<ClockStateResponse> {
+    let state = crate::ingestion::drift_estimator::KalmanClockState::default();
+    Json(ClockStateResponse {
+        offset_seconds: state.offset_seconds,
+        estimated_drift_ppm: state.drift_ppm(),
+        last_ntp_rtt_ms: state.last_rtt_ms,
+        correction_ns: state.correction_ns(),
+    })
+}
+
 pub async fn readyz_handler() -> StatusCode {
     let starvation = metrics::get_starvation_count();
     if starvation > 100.0 {
@@ -164,6 +236,18 @@ pub struct RegisterMeterRequest {
 pub struct RegisterMeterResponse {
     pub meter_id: String,
     pub status: String,
+}
+
+pub async fn tenant_usage(
+    Path(tenant_id): Path<String>,
+) -> Result<Json<crate::time_series::pool::TenantUsage>, StatusCode> {
+    let manager =
+        crate::time_series::pool::global_pool_manager().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+    manager
+        .tenant_usage(&tenant_id)
+        .await
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
 }
 
 pub async fn compression_status() -> Result<Json<CompressionStatus>, StatusCode> {
