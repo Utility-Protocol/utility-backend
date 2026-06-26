@@ -45,7 +45,6 @@ pub struct CircuitBreakerSnapshot {
     pub window_size: usize,
 }
 
-#[allow(dead_code)]
 pub struct CircuitBreaker {
     samples: VecDeque<RequestSample>,
     state: CircuitState,
@@ -107,33 +106,6 @@ impl CircuitBreaker {
         rpc_url: &str,
         payload: serde_json::Value,
     ) -> Result<SorobanRpcResponse, &'static str> {
-        if self.is_open {
-            return Err("circuit breaker open: rpc calls suspended");
-        }
-
-        let client = reqwest::Client::new();
-        let resp = client
-            .post(rpc_url)
-            .json(&payload)
-            .send()
-            .await
-            .map_err(|_| {
-                self.record_failure();
-                "rpc request failed"
-            })?;
-
-        let body: SorobanRpcResponse = resp
-            .json()
-            .await
-            .map_err(|_| {
-                self.record_failure();
-                "failed to parse rpc response"
-            })?;
-
-        self.failure_count = 0;
-        self.is_open = false;
-        info!("soroban rpc call succeeded");
-        Ok(body)
         match self.admit_request(payload.clone())? {
             Admission::Execute => {}
             Admission::Queued => return Err("circuit breaker open: rpc request queued"),
@@ -335,12 +307,5 @@ mod tests {
 
         breaker.record_sample(Duration::from_millis(50), true);
         assert_eq!(breaker.state(), CircuitState::Closed);
-    }
-
-    fn record_failure(&mut self) {
-        self.failure_count += 1;
-        if self.failure_count >= self.max_failures {
-            self.is_open = true;
-        }
     }
 }

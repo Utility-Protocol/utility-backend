@@ -13,7 +13,6 @@ use std::sync::Arc;
 use crate::api::metrics;
 use crate::gateway::crypto::global_registry;
 use crate::gateway::lock::{ActiveLock, AdvisoryLock};
-use crate::soroban::sequencer::NonceSequencer;
 use crate::tariffs::engine::{global_tariff_engine, TariffContext, TariffExplanation};
 use crate::time_series::analytics::{global_engine, DiagnosticReport};
 use crate::time_series::compression::CompressionStatus;
@@ -49,9 +48,7 @@ pub struct GridNonceStatus {
     pub high_water_mark: u64,
 }
 
-pub async fn nonce_status(
-    State(state): State<AppState>,
-) -> Json<Vec<GridNonceStatus>> {
+pub async fn nonce_status(State(state): State<AppState>) -> Json<Vec<GridNonceStatus>> {
     let marks = state.sequencer.get_all_grid_high_water_marks();
     let statuses: Vec<GridNonceStatus> = marks
         .into_iter()
@@ -142,8 +139,13 @@ pub async fn settle_account(
     State(state): State<AppState>,
     Json(body): Json<SettlementRequest>,
 ) -> Result<Json<&'static str>, StatusCode> {
-    let rpc_url = std::env::var("SOROBAN_RPC_URL").unwrap_or_else(|_| "http://localhost:8000".into());
-    let finalizer = crate::settlement::finalizer::Finalizer::new(state.pool.clone(), rpc_url, state.breaker.clone());
+    let rpc_url =
+        std::env::var("SOROBAN_RPC_URL").unwrap_or_else(|_| "http://localhost:8000".into());
+    let finalizer = crate::settlement::finalizer::Finalizer::new(
+        state.pool.clone(),
+        rpc_url,
+        state.breaker.clone(),
+    );
     let mint_queue = crate::settlement::mint_queue::MintQueue::new(state.pool);
 
     // In a real scenario, we'd get readings from the database.

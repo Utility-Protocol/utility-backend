@@ -1,7 +1,7 @@
-use serde::{Deserialize, Serialize};
-use sqlx::{PgPool, FromRow};
-use uuid::Uuid;
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use sqlx::{FromRow, PgPool};
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct MintEvent {
@@ -22,13 +22,19 @@ impl MintQueue {
         Self { pool }
     }
 
-    pub async fn enqueue(&self, batch_id: &str, resource_type: &str, amount: f64, destination_wallet: &str) -> Result<Uuid, sqlx::Error> {
+    pub async fn enqueue(
+        &self,
+        batch_id: &str,
+        resource_type: &str,
+        amount: f64,
+        destination_wallet: &str,
+    ) -> Result<Uuid, sqlx::Error> {
         let id = Uuid::new_v4();
         sqlx::query(
             r#"
             INSERT INTO pending_mints (id, batch_id, resource_type, amount, destination_wallet)
             VALUES ($1, $2, $3, $4, $5)
-            "#
+            "#,
         )
         .bind(id)
         .bind(batch_id)
@@ -47,7 +53,7 @@ impl MintQueue {
             SELECT id, batch_id, resource_type, amount, destination_wallet, created_at
             FROM pending_mints
             WHERE batch_id = $1
-            "#
+            "#,
         )
         .bind(batch_id)
         .fetch_all(&self.pool)
@@ -57,12 +63,10 @@ impl MintQueue {
     }
 
     pub async fn remove_event(&self, id: Uuid) -> Result<(), sqlx::Error> {
-        sqlx::query(
-            "DELETE FROM pending_mints WHERE id = $1"
-        )
-        .bind(id)
-        .execute(&self.pool)
-        .await?;
+        sqlx::query("DELETE FROM pending_mints WHERE id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
 
         Ok(())
     }

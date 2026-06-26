@@ -1,11 +1,3 @@
-use chrono::DateTime;
-use chrono::Utc;
-
-pub struct TariffEngine {
-    schedules: Vec<TariffSchedule>,
-}
-
-#[derive(serde::Deserialize, serde::Serialize, Clone, Debug)]
 use chrono::{DateTime, Datelike, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, OnceLock, RwLock};
@@ -21,7 +13,7 @@ pub enum TariffTier {
     Dynamic,
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct TariffSchedule {
     pub tier: TariffTier,
     pub rate_per_unit: f64,
@@ -228,7 +220,12 @@ impl TariffEngine {
     pub fn evaluate_context(&self, ctx: TariffContext) -> TariffExplanation {
         let dag = self.dag.read().expect("tariff DAG lock poisoned").clone();
         let explanation = dag.evaluate(&ctx);
-        info!(meter_id = %ctx.meter_id, cost = explanation.total_cost, rules = explanation.applied_rules.len(), "tariff evaluated");
+        info!(
+            meter_id = %ctx.meter_id,
+            cost = explanation.total_cost,
+            rules = explanation.applied_rules.len(),
+            "tariff evaluated"
+        );
         explanation
     }
 
@@ -237,12 +234,6 @@ impl TariffEngine {
     }
 
     pub fn evaluate(&self, timestamp: DateTime<Utc>, volume: f64) -> f64 {
-        use chrono::Timelike;
-        let hour = timestamp.hour() as u8;
-        for schedule in &self.schedules {
-            if hour >= schedule.start_hour && hour < schedule.end_hour {
-                return volume * schedule.rate_per_unit;
-            }
         let ctx = TariffContext {
             meter_id: "legacy".into(),
             timestamp,
