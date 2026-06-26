@@ -16,7 +16,6 @@ pub struct AppState {
     pub sequencer: Arc<NonceSequencer>,
     pub db_pool: Pool<Postgres>,
     pub advisory_lock: Arc<AdvisoryLock>,
-    pub rate_limiter: Arc<middleware::RateLimiter>,
     pub rate_limiter: Arc<DynamicRateLimiter>,
 }
 
@@ -38,7 +37,6 @@ impl FromRef<AppState> for Arc<AdvisoryLock> {
     }
 }
 
-impl FromRef<AppState> for Arc<middleware::RateLimiter> {
 impl FromRef<AppState> for Arc<DynamicRateLimiter> {
     fn from_ref(state: &AppState) -> Self {
         state.rate_limiter.clone()

@@ -3,7 +3,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use tracing_subscriber::EnvFilter;
 
-use utility_backend::api::middleware::RateLimiter;
 use utility_backend::api::middleware::DynamicRateLimiter;
 use utility_backend::api::AppState;
 use utility_backend::gateway::lock::AdvisoryLock;
@@ -53,16 +52,7 @@ async fn main() -> anyhow::Result<()> {
     let _transport = spawn_transport_monitors(TcpTransportConfig::default());
 
     let advisory_lock = Arc::new(AdvisoryLock::postgres(db_pool.clone()));
-    let rate_limiter = Arc::new(RateLimiter::new(10000, 100, 10));
-
-    let rl_cleanup = rate_limiter.clone();
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(60));
-        loop {
-            interval.tick().await;
-            rl_cleanup.cleanup(Duration::from_secs(3600));
-        }
-    });
+    let rate_limiter = DynamicRateLimiter::new();
 
     let state = AppState {
         sequencer,
