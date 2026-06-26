@@ -244,14 +244,12 @@ impl HtbTree {
         }
 
         let req = requested as i64;
-        let mut deducted = 0usize;
-        for node in &path {
+        for (i, node) in path.iter().enumerate() {
             let after = node.tokens.fetch_sub(req, Ordering::AcqRel) - req;
-            deducted += 1;
             let floor = -(node.burst.load(Ordering::Acquire) as i64);
             if after < floor {
                 // Roll back every node debited so far (this one included).
-                for n in &path[..deducted] {
+                for n in &path[..=i] {
                     n.tokens.fetch_add(req, Ordering::AcqRel);
                 }
                 return false;
