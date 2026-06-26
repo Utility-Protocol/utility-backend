@@ -1,1 +1,1 @@
-pub mod partition_recovery;
+pub mod stream_test;
