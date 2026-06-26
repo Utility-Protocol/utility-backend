@@ -229,6 +229,39 @@ pub fn set_tcp_active_connections(count: f64) {
 }
 
 lazy_static! {
+    pub static ref WATERMARK_DIVERGENCE_COUNT: Counter = register_counter!(
+        "utility_watermark_divergence_count_total",
+        "Total number of times a watermark divergence was detected"
+    )
+    .unwrap();
+    pub static ref RECONCILIATION_DURATION_MS: HistogramVec = register_histogram_vec!(
+        "utility_reconciliation_duration_ms",
+        "Duration of watermark reconciliation in milliseconds",
+        &["status"]
+    )
+    .unwrap();
+    pub static ref PARTITION_SECONDS_TOTAL: Counter = register_counter!(
+        "utility_partition_seconds_total",
+        "Total duration of detected network partitions in seconds"
+    )
+    .unwrap();
+}
+
+pub fn record_watermark_divergence() {
+    WATERMARK_DIVERGENCE_COUNT.inc();
+}
+
+pub fn record_reconciliation_duration_ms(status: &str, duration_ms: f64) {
+    RECONCILIATION_DURATION_MS
+        .with_label_values(&[status])
+        .observe(duration_ms);
+}
+
+pub fn inc_partition_seconds(seconds: u64) {
+    PARTITION_SECONDS_TOTAL.inc_by(seconds as f64);
+}
+
+lazy_static! {
     pub static ref POOL_CONNECTIONS_ACTIVE: GaugeVec = register_gauge_vec!(
         "utility_pool_connections_active",
         "Active connections per priority class",
