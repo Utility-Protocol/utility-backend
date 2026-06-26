@@ -47,6 +47,7 @@ tokio-stream = "0.1"
 lru = "0.12"
 socket2 = { version = "0.5", features = ["all"] }
 libc = "0.2"
+thread_local = "1"
 rocksdb = "0.21"
 tonic = "0.11"
 prost = "0.12"
@@ -80,4 +81,8 @@ path = "tests/integration/double_mint_prevention.rs"
 
 [[bench]]
 name = "merkle_bench"
+harness = false
+
+[[bench]]
+name = "arena_bench"
 harness = false
