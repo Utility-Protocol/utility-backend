@@ -1,5 +1,6 @@
 pub mod api_tests;
 pub mod gateway_tests;
+pub mod ratelimit;
 pub mod settlement;
 pub mod soroban_tests;
 pub mod storage;
