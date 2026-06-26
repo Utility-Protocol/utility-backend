@@ -49,6 +49,10 @@ socket2 = { version = "0.5", features = ["all"] }
 libc = "0.2"
 thread_local = "1"
 rocksdb = "0.21"
+p256 = { version = "0.13", features = ["ecdsa"] }
+ecdsa = "0.16"
+x509-cert = { version = "0.2", features = ["builder"] }
+dcap-qvl = "0.5"
 tonic = "0.11"
 prost = "0.12"
 prost-types = "0.12"
@@ -61,6 +65,7 @@ protobuf-src = "2.1"
 
 [dev-dependencies]
 axum-test = "14"
+tempfile = "3"
 proptest = "1"
 criterion = "0.5"
 rand = "0.8"
