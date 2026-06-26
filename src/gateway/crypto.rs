@@ -209,6 +209,10 @@ impl MeterRegistry {
         self.meters.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.meters.is_empty()
+    }
+
     fn log_auth_failure(meter_id: &str, reason: &str, _source_ip: Option<String>) {
         warn!(
             meter_id = %meter_id,

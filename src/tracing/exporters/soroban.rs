@@ -1,11 +1,11 @@
+use crate::blockchain::soroban::client::SorobanClient;
+use crate::tracing::soroban_propagator::extract_context;
+use opentelemetry::trace::{Span, SpanContext, SpanKind, TraceContextExt, Tracer};
+use opentelemetry::{global, Context};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
-use opentelemetry::trace::{Tracer, Span, SpanKind, TraceContextExt, SpanContext};
-use opentelemetry::{global, Context};
-use crate::blockchain::soroban::client::SorobanClient;
-use crate::tracing::soroban_propagator::{extract_context};
-use std::collections::HashMap;
 
 pub struct SorobanEventPoller {
     client: Arc<Mutex<SorobanClient>>,
@@ -16,7 +16,11 @@ pub struct SorobanEventPoller {
 }
 
 impl SorobanEventPoller {
-    pub fn new(client: Arc<Mutex<SorobanClient>>, poll_interval: Duration, contract_ids: Vec<String>) -> Self {
+    pub fn new(
+        client: Arc<Mutex<SorobanClient>>,
+        poll_interval: Duration,
+        contract_ids: Vec<String>,
+    ) -> Self {
         Self {
             client,
             poll_interval,
@@ -34,12 +38,21 @@ impl SorobanEventPoller {
             interval.tick().await;
 
             let mut client = self.client.lock().await;
-            if let Ok(events) = client.get_events(self.last_ledger, self.contract_ids.clone()).await {
+            if let Ok(events) = client
+                .get_events(self.last_ledger, self.contract_ids.clone())
+                .await
+            {
                 for event in events {
                     if let Some((trace_id, span_id, flags)) = extract_context(&event) {
-                        let context = SpanContext::new(trace_id, span_id, flags, true, opentelemetry::trace::TraceState::default());
+                        let context = SpanContext::new(
+                            trace_id,
+                            span_id,
+                            flags,
+                            true,
+                            opentelemetry::trace::TraceState::default(),
+                        );
 
-                        let event_type = event.topics.get(0).map(|s| s.as_str()).unwrap_or("");
+                        let event_type = event.topics.first().map(|s| s.as_str()).unwrap_or("");
 
                         let key = format!("{}-{}-{}", trace_id, span_id, event.contract_id);
 
@@ -47,7 +60,8 @@ impl SorobanEventPoller {
                             let span_name = format!("soroban.contract.{}", event.contract_id);
                             let parent_cx = Context::new().with_remote_span_context(context);
 
-                            let span = tracer.span_builder(span_name)
+                            let span = tracer
+                                .span_builder(span_name)
                                 .with_kind(SpanKind::Server)
                                 .start_with_context(&tracer, &parent_cx);
 

@@ -395,6 +395,10 @@ impl MultiTenantPoolManager {
         &self.tenant_catalog
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.tenant_catalog.is_empty()
+    }
+
     pub fn max_connections(&self) -> usize {
         self.max_connections
     }
