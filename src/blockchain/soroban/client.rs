@@ -1,3 +1,4 @@
+use crate::blockchain::soroban::reorg_handler::LedgerInfo;
 use crate::soroban::rpc::{CircuitBreaker, SorobanRpcResponse};
 use serde_json::json;
 
@@ -33,5 +34,66 @@ impl SorobanClient {
         });
 
         self.circuit_breaker.call_rpc(&self.rpc_url, payload).await
+    }
+
+    /// Fetch canonical `(seq, hash)` for the inclusive ledger range, used by the
+    /// reorg handler to compare against the locally indexed chain.
+    pub async fn get_ledger_range(
+        &mut self,
+        start_seq: u64,
+        end_seq: u64,
+    ) -> Result<Vec<LedgerInfo>, &'static str> {
+        let payload = json!({
+            "jsonrpc": "2.0",
+            "id": "get_ledger_range",
+            "method": "getLedgers",
+            "params": { "startLedger": start_seq, "endLedger": end_seq }
+        });
+        let resp = self
+            .circuit_breaker
+            .call_rpc(&self.rpc_url, payload)
+            .await?;
+        let result = resp.result.ok_or("missing result")?;
+        let ledgers = result
+            .get("ledgers")
+            .and_then(|v| v.as_array())
+            .ok_or("missing ledgers array")?;
+
+        let mut out = Vec::with_capacity(ledgers.len());
+        for entry in ledgers {
+            let seq = entry
+                .get("sequence")
+                .and_then(|v| v.as_u64())
+                .ok_or("missing ledger sequence")?;
+            let hash_hex = entry
+                .get("hash")
+                .and_then(|v| v.as_str())
+                .ok_or("missing ledger hash")?;
+            let bytes = hex::decode(hash_hex).map_err(|_| "invalid ledger hash hex")?;
+            let hash: [u8; 32] = bytes.try_into().map_err(|_| "ledger hash not 32 bytes")?;
+            out.push(LedgerInfo { seq, hash });
+        }
+        Ok(out)
+    }
+
+    /// Whether `tx_hash` is included in the canonical ledger `ledger_seq`.
+    pub async fn is_tx_in_ledger(
+        &mut self,
+        tx_hash: [u8; 32],
+        ledger_seq: u64,
+    ) -> Result<bool, &'static str> {
+        let payload = json!({
+            "jsonrpc": "2.0",
+            "id": "is_tx_in_ledger",
+            "method": "getTransaction",
+            "params": { "hash": hex::encode(tx_hash) }
+        });
+        let resp = self
+            .circuit_breaker
+            .call_rpc(&self.rpc_url, payload)
+            .await?;
+        let result = resp.result.ok_or("missing result")?;
+        let included = result.get("ledger").and_then(|v| v.as_u64()) == Some(ledger_seq);
+        Ok(included)
     }
 }
