@@ -8,6 +8,7 @@ use sqlx::{Pool, Postgres};
 use std::sync::Arc;
 
 use crate::api::metrics;
+use crate::api::middleware::RateLimiter;
 use crate::gateway::crypto::global_registry;
 use crate::gateway::lock::{ActiveLock, AdvisoryLock};
 use crate::soroban::sequencer::NonceSequencer;
@@ -303,17 +304,10 @@ pub async fn register_meter(
     }))
 }
 
-#[derive(Deserialize)]
-pub struct RotateKeyRequest {
-    pub meter_id: String,
-    pub new_public_key_hex: String,
-    pub old_signature_hex: String,
-}
-
-#[derive(Serialize)]
-pub struct RotateKeyResponse {
-    pub meter_id: String,
-    pub status: String,
+pub async fn rate_limiter_status(
+    State(rate_limiter): State<Arc<RateLimiter>>,
+) -> Json<Vec<(String, u64)>> {
+    Json(rate_limiter.get_status())
 }
 
 pub async fn rotate_key(
@@ -342,4 +336,17 @@ pub async fn rotate_key(
         meter_id: body.meter_id,
         status: "key-rotated".into(),
     }))
+}
+
+#[derive(Deserialize)]
+pub struct RotateKeyRequest {
+    pub meter_id: String,
+    pub new_public_key_hex: String,
+    pub old_signature_hex: String,
+}
+
+#[derive(Serialize)]
+pub struct RotateKeyResponse {
+    pub meter_id: String,
+    pub status: String,
 }
