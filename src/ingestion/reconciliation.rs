@@ -28,7 +28,8 @@ impl Default for ReconciliationService {
 
 #[tonic::async_trait]
 impl OffsetReconciliation for ReconciliationService {
-    type ReconcileStream = Pin<Box<dyn Stream<Item = Result<ReconciliationResponse, Status>> + Send>>;
+    type ReconcileStream =
+        Pin<Box<dyn Stream<Item = Result<ReconciliationResponse, Status>> + Send>>;
 
     async fn reconcile(
         &self,
@@ -68,12 +69,14 @@ impl OffsetReconciliation for ReconciliationService {
 }
 
 pub struct ReconciliationClient {
-    client: proto::offset_reconciliation_client::OffsetReconciliationClient<tonic::transport::Channel>,
+    client:
+        proto::offset_reconciliation_client::OffsetReconciliationClient<tonic::transport::Channel>,
 }
 
 impl ReconciliationClient {
     pub async fn connect(dst: String) -> Result<Self, tonic::transport::Error> {
-        let client = proto::offset_reconciliation_client::OffsetReconciliationClient::connect(dst).await?;
+        let client =
+            proto::offset_reconciliation_client::OffsetReconciliationClient::connect(dst).await?;
         Ok(Self { client })
     }
 

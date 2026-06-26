@@ -46,7 +46,11 @@ impl PhiAccrualFailureDetector {
 
         let diff = now.duration_since(*last).as_secs_f64();
         let mean = samples.iter().map(|d| d.as_secs_f64()).sum::<f64>() / samples.len() as f64;
-        let variance = samples.iter().map(|d| (d.as_secs_f64() - mean).powi(2)).sum::<f64>() / samples.len() as f64;
+        let variance = samples
+            .iter()
+            .map(|d| (d.as_secs_f64() - mean).powi(2))
+            .sum::<f64>()
+            / samples.len() as f64;
         let std_dev = variance.sqrt().max(self.min_std_dev);
 
         let exponent = -(diff - mean) / std_dev;
@@ -72,7 +76,7 @@ pub mod proto {
     }
 }
 
-use crate::ingestion::watermark::{WatermarkVector, HlcTimestamp, WatermarkEntry};
+use crate::ingestion::watermark::{HlcTimestamp, WatermarkEntry, WatermarkVector};
 
 pub struct GossipService {
     node_id: String,
@@ -100,33 +104,49 @@ impl GossipService {
         };
 
         for (count, (id, entry)) in wv.entries.iter().enumerate() {
-            if count >= 1000 { break; }
-            delta.entries.insert(*id, proto::watermark::WatermarkEntry {
-                hlc: Some(proto::watermark::HlcTimestamp { value: entry.hlc.as_u64() }),
-                offset: entry.offset,
-            });
+            if count >= 1000 {
+                break;
+            }
+            delta.entries.insert(
+                *id,
+                proto::watermark::WatermarkEntry {
+                    hlc: Some(proto::watermark::HlcTimestamp {
+                        value: entry.hlc.as_u64(),
+                    }),
+                    offset: entry.offset,
+                },
+            );
         }
 
         self.last_sent_epoch = current_epoch;
 
         proto::gossip::GossipMessage {
             node_id: self.node_id.clone(),
-            heartbeat: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+            heartbeat: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
             watermark_delta: Some(delta),
         }
     }
 
     pub fn handle_gossip_message(&self, msg: proto::gossip::GossipMessage) -> Vec<u32> {
-        self.failure_detector.write().unwrap().heartbeat(&msg.node_id);
+        self.failure_detector
+            .write()
+            .unwrap()
+            .heartbeat(&msg.node_id);
 
         if let Some(delta) = msg.watermark_delta {
             let mut wv = self.watermark_vector.write().unwrap();
             let mut other_wv = WatermarkVector::new();
             for (id, entry) in delta.entries {
-                other_wv.entries.insert(id, WatermarkEntry {
-                    hlc: HlcTimestamp::from(entry.hlc.map(|h| h.value).unwrap_or(0)),
-                    offset: entry.offset,
-                });
+                other_wv.entries.insert(
+                    id,
+                    WatermarkEntry {
+                        hlc: HlcTimestamp::from(entry.hlc.map(|h| h.value).unwrap_or(0)),
+                        offset: entry.offset,
+                    },
+                );
             }
             return wv.merge(&other_wv);
         }
