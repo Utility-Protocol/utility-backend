@@ -116,12 +116,19 @@ impl RateLimiter {
             return Err(StatusCode::TOO_MANY_REQUESTS);
         }
 
-        let source_entry = self.sources.entry(source_id.to_string()).and_modify(|(_, last_seen)| *last_seen = Instant::now()).or_insert_with(|| {
-            (Arc::new(SourceLimiter::new(
-                self.normal_per_source_rate,
-                self.normal_per_source_rate,
-            )), Instant::now())
-        });
+        let source_entry = self
+            .sources
+            .entry(source_id.to_string())
+            .and_modify(|(_, last_seen)| *last_seen = Instant::now())
+            .or_insert_with(|| {
+                (
+                    Arc::new(SourceLimiter::new(
+                        self.normal_per_source_rate,
+                        self.normal_per_source_rate,
+                    )),
+                    Instant::now(),
+                )
+            });
 
         let (source, _) = source_entry.value();
 
@@ -178,7 +185,8 @@ impl RateLimiter {
     }
 
     fn record_rejection(&self, source_id: &str) {
-        let stats = self.rejections
+        let stats = self
+            .rejections
             .entry(source_id.to_string())
             .or_insert_with(|| RejectionStats {
                 count: AtomicU64::new(0),
@@ -189,12 +197,18 @@ impl RateLimiter {
     }
 
     pub fn flag_source(&self, source_id: &str) {
-        let source_entry = self.sources.entry(source_id.to_string()).or_insert_with(|| {
-            (Arc::new(SourceLimiter::new(
-                self.normal_per_source_rate,
-                self.normal_per_source_rate,
-            )), Instant::now())
-        });
+        let source_entry = self
+            .sources
+            .entry(source_id.to_string())
+            .or_insert_with(|| {
+                (
+                    Arc::new(SourceLimiter::new(
+                        self.normal_per_source_rate,
+                        self.normal_per_source_rate,
+                    )),
+                    Instant::now(),
+                )
+            });
         let (source, _) = source_entry.value();
         let mut flagged = source.flagged.lock();
         *flagged = true;
@@ -205,17 +219,24 @@ impl RateLimiter {
         let mut stats: Vec<(String, u64)> = self
             .rejections
             .iter()
-            .map(|entry| (entry.key().clone(), entry.value().count.load(Ordering::Relaxed)))
+            .map(|entry| {
+                (
+                    entry.key().clone(),
+                    entry.value().count.load(Ordering::Relaxed),
+                )
+            })
             .collect();
 
-        stats.sort_by(|a, b| b.1.cmp(&a.1));
+        stats.sort_by_key(|a| std::cmp::Reverse(a.1));
         stats.into_iter().take(10).collect()
     }
 
     pub fn cleanup(&self, max_age: Duration) {
         let now = Instant::now();
-        self.sources.retain(|_, (_, last_seen)| now.duration_since(*last_seen) < max_age);
-        self.rejections.retain(|_, stats| now.duration_since(*stats.last_seen.lock()) < max_age);
+        self.sources
+            .retain(|_, (_, last_seen)| now.duration_since(*last_seen) < max_age);
+        self.rejections
+            .retain(|_, stats| now.duration_since(*stats.last_seen.lock()) < max_age);
     }
 }
 
@@ -243,7 +264,11 @@ impl TokenBucket {
         loop {
             let tokens = self.tokens.load(Ordering::Acquire);
             if tokens > new_rate {
-                if self.tokens.compare_exchange(tokens, new_rate, Ordering::SeqCst, Ordering::Relaxed).is_ok() {
+                if self
+                    .tokens
+                    .compare_exchange(tokens, new_rate, Ordering::SeqCst, Ordering::Relaxed)
+                    .is_ok()
+                {
                     warn!(new_rate, tokens, "Capped tokens after rate reduction");
                     break;
                 }
@@ -265,8 +290,13 @@ impl TokenBucket {
                 let max_tokens = self.max_tokens.load(Ordering::Acquire);
                 loop {
                     let current = self.tokens.load(Ordering::Acquire);
-                    let new_tokens = std::cmp::min(max_tokens, current.saturating_add(tokens_to_add));
-                    if self.tokens.compare_exchange(current, new_tokens, Ordering::SeqCst, Ordering::Relaxed).is_ok() {
+                    let new_tokens =
+                        std::cmp::min(max_tokens, current.saturating_add(tokens_to_add));
+                    if self
+                        .tokens
+                        .compare_exchange(current, new_tokens, Ordering::SeqCst, Ordering::Relaxed)
+                        .is_ok()
+                    {
                         break;
                     }
                 }
