@@ -17,8 +17,6 @@ use super::frame_parser::{read_frame, Frame, FrameError};
 pub struct StreamStats {
     /// Frames successfully read and dispatched.
     pub frames: u64,
-    /// Frames rejected for exceeding `MAX_FRAME_SIZE`.
-    pub oversized: u64,
 }
 
 /// Read length-prefixed frames from `reader` until EOF, invoking `on_frame` for
@@ -46,7 +44,7 @@ where
             }
             Err(FrameError::Closed) => return Ok(stats),
             Err(FrameError::FrameTooLarge { length, max }) => {
-                stats.oversized += 1;
+                // Framing is unrecoverable after a bogus length; log and end.
                 warn!(
                     length,
                     max, "SECURITY: oversized telemetry frame; dropping connection"

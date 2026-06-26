@@ -125,7 +125,6 @@ async fn test_handle_stream_dispatches_all_frames() {
     .unwrap();
 
     assert_eq!(stats.frames, n);
-    assert_eq!(stats.oversized, 0);
     let got = received.lock();
     assert_eq!(got.len(), n as usize);
     assert_eq!(got[0], 0);
