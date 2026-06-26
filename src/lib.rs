@@ -8,6 +8,7 @@ pub mod ratelimit;
 pub mod settlement;
 pub mod soroban;
 pub mod storage;
+pub mod tracing;
 pub mod tariffs;
 pub mod time_series;
 pub mod transport;
