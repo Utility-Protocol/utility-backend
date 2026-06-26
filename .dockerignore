@@ -1,0 +1,8 @@
+target/
+.git/
+.github/
+.gitignore
+Dockerfile
+docker-compose.yml
+*.md
+proptest-regressions/
