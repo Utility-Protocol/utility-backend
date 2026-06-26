@@ -229,36 +229,30 @@ pub fn set_tcp_active_connections(count: f64) {
 }
 
 lazy_static! {
-    pub static ref WATERMARK_DIVERGENCE_COUNT: Counter = register_counter!(
-        "utility_watermark_divergence_count_total",
-        "Total number of times a watermark divergence was detected"
+    pub static ref ARENA_ALLOC_COUNT: Gauge = register_gauge!(
+        "utility_arena_alloc_count",
+        "Cumulative arena block allocations"
     )
     .unwrap();
-    pub static ref RECONCILIATION_DURATION_MS: HistogramVec = register_histogram_vec!(
-        "utility_reconciliation_duration_ms",
-        "Duration of watermark reconciliation in milliseconds",
-        &["status"]
+    pub static ref ARENA_FREE_COUNT: Gauge =
+        register_gauge!("utility_arena_free_count", "Cumulative arena block frees").unwrap();
+    pub static ref ARENA_GLOBAL_ACQUIRE_COUNT: Gauge = register_gauge!(
+        "utility_arena_global_acquire_count",
+        "Cumulative bulk acquisitions from a size class's global slab"
     )
     .unwrap();
-    pub static ref PARTITION_SECONDS_TOTAL: Counter = register_counter!(
-        "utility_partition_seconds_total",
-        "Total duration of detected network partitions in seconds"
+    pub static ref ARENA_PAGE_FAULT_COUNT: Gauge = register_gauge!(
+        "utility_arena_page_fault_count",
+        "Cumulative new slabs mapped (proxy for hot-path page faults)"
     )
     .unwrap();
 }
 
-pub fn record_watermark_divergence() {
-    WATERMARK_DIVERGENCE_COUNT.inc();
-}
-
-pub fn record_reconciliation_duration_ms(status: &str, duration_ms: f64) {
-    RECONCILIATION_DURATION_MS
-        .with_label_values(&[status])
-        .observe(duration_ms);
-}
-
-pub fn inc_partition_seconds(seconds: u64) {
-    PARTITION_SECONDS_TOTAL.inc_by(seconds as f64);
+pub fn set_arena_counters(alloc: f64, free: f64, global_acquire: f64, page_fault: f64) {
+    ARENA_ALLOC_COUNT.set(alloc);
+    ARENA_FREE_COUNT.set(free);
+    ARENA_GLOBAL_ACQUIRE_COUNT.set(global_acquire);
+    ARENA_PAGE_FAULT_COUNT.set(page_fault);
 }
 
 lazy_static! {
