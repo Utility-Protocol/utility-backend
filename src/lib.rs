@@ -3,6 +3,7 @@ pub mod blockchain;
 pub mod gateway;
 pub mod ingestion;
 pub mod memory;
+pub mod ratelimit;
 pub mod settlement;
 pub mod soroban;
 pub mod storage;
