@@ -1,8 +1,8 @@
 pub mod api_tests;
-pub mod blockchain;
+pub mod gateway;
 pub mod gateway_tests;
 pub mod ingestion;
-pub mod lifecycle;
+pub mod ratelimit;
 pub mod settlement;
 pub mod soroban_tests;
 pub mod storage;
