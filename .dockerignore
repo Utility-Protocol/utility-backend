@@ -5,6 +5,4 @@ target/
 Dockerfile
 docker-compose.yml
 *.md
-benches/
-tests/
 proptest-regressions/
