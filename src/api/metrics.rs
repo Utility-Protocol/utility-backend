@@ -229,6 +229,33 @@ pub fn set_tcp_active_connections(count: f64) {
 }
 
 lazy_static! {
+    pub static ref ARENA_ALLOC_COUNT: Gauge = register_gauge!(
+        "utility_arena_alloc_count",
+        "Cumulative arena block allocations"
+    )
+    .unwrap();
+    pub static ref ARENA_FREE_COUNT: Gauge =
+        register_gauge!("utility_arena_free_count", "Cumulative arena block frees").unwrap();
+    pub static ref ARENA_GLOBAL_ACQUIRE_COUNT: Gauge = register_gauge!(
+        "utility_arena_global_acquire_count",
+        "Cumulative bulk acquisitions from a size class's global slab"
+    )
+    .unwrap();
+    pub static ref ARENA_PAGE_FAULT_COUNT: Gauge = register_gauge!(
+        "utility_arena_page_fault_count",
+        "Cumulative new slabs mapped (proxy for hot-path page faults)"
+    )
+    .unwrap();
+}
+
+pub fn set_arena_counters(alloc: f64, free: f64, global_acquire: f64, page_fault: f64) {
+    ARENA_ALLOC_COUNT.set(alloc);
+    ARENA_FREE_COUNT.set(free);
+    ARENA_GLOBAL_ACQUIRE_COUNT.set(global_acquire);
+    ARENA_PAGE_FAULT_COUNT.set(page_fault);
+}
+
+lazy_static! {
     pub static ref POOL_CONNECTIONS_ACTIVE: GaugeVec = register_gauge_vec!(
         "utility_pool_connections_active",
         "Active connections per priority class",
