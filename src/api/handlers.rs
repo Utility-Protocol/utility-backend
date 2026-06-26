@@ -11,6 +11,7 @@ use sqlx::{Pool, Postgres};
 use std::sync::Arc;
 
 use crate::api::metrics;
+use crate::api::middleware::DynamicRateLimiter;
 use crate::gateway::crypto::global_registry;
 use crate::gateway::lock::{ActiveLock, AdvisoryLock};
 use crate::tariffs::engine::{global_tariff_engine, TariffContext, TariffExplanation};
@@ -377,4 +378,17 @@ pub async fn rotate_key(
         meter_id: body.meter_id,
         status: "key-rotated".into(),
     }))
+}
+
+#[derive(Serialize)]
+pub struct RateLimiterStatusResponse {
+    pub top_sources: Vec<(String, u64)>,
+}
+
+pub async fn rate_limiter_status(
+    State(limiter): State<Arc<DynamicRateLimiter>>,
+) -> Json<RateLimiterStatusResponse> {
+    Json(RateLimiterStatusResponse {
+        top_sources: limiter.get_status(),
+    })
 }
