@@ -1,6 +1,7 @@
 pub mod api_tests;
 pub mod gateway;
 pub mod gateway_tests;
+pub mod identity;
 pub mod ingestion;
 pub mod ratelimit;
 pub mod settlement;

@@ -1,6 +1,7 @@
 pub mod api;
 pub mod blockchain;
 pub mod gateway;
+pub mod identity;
 pub mod ingestion;
 pub mod lifecycle;
 pub mod memory;

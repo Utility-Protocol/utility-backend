@@ -10,9 +10,12 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use socket2::{Domain, Protocol, Socket, Type};
-use tokio::io::AsyncReadExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tracing::{debug, warn};
+
+use crate::identity::attestation::AttestationVerifier;
+use crate::identity::cert_store::CertStore;
 
 use super::connection_manager::{ConnectionManager, MeterId, Priority, TimedTcpStream};
 use super::rate_limiter::ConnectionRateLimiter;
@@ -62,6 +65,8 @@ pub async fn accept_and_register(
     listener: &TcpListener,
     cm: &Arc<ConnectionManager>,
     limiter: &Arc<ConnectionRateLimiter>,
+    attestation_verifier: Option<&Arc<AttestationVerifier>>,
+    cert_store: Option<&Arc<CertStore>>,
 ) -> io::Result<(MeterId, TimedTcpStream)> {
     // Smoothly throttle to the configured token-bucket rate during storms.
     limiter.acquire().await;
@@ -79,6 +84,59 @@ pub async fn accept_and_register(
             return Err(e);
         }
     };
+
+    // --- Remote Attestation Handshake ---
+    if let (Some(verifier), Some(store)) = (attestation_verifier, cert_store) {
+        if verifier.config.attestation_enabled {
+            debug!(%meter_id, %peer, "initiating remote attestation challenge");
+
+            // 1. Generate and send 32-byte nonce
+            let mut nonce = [0u8; 32];
+            rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut nonce);
+            stream.write_all(&nonce).await?;
+
+            // 2. Receive quote length (u16 BE) and quote
+            let quote_len = stream.read_u16().await? as usize;
+            let mut quote = vec![0u8; quote_len];
+            stream.read_exact(&mut quote).await?;
+
+            // 3. Receive public key length (u16 BE) and public key (SEC1)
+            let pk_len = stream.read_u16().await? as usize;
+            let mut pk_bytes = vec![0u8; pk_len];
+            stream.read_exact(&mut pk_bytes).await?;
+
+            // 4. Receive enclave signature length (u16 BE) and signature
+            let sig_len = stream.read_u16().await? as usize;
+            let mut sig_bytes = vec![0u8; sig_len];
+            stream.read_exact(&mut sig_bytes).await?;
+
+            // 5. Verify quote
+            match verifier.verify_quote(&quote, meter_id.clone(), &nonce).await {
+                Ok(_) => {
+                    // 6. Certify public key and store it
+                    match verifier.certify_key(meter_id.clone(), &pk_bytes, &sig_bytes) {
+                        Ok(cert) => {
+                            if let Err(e) = store.store_certificate(&meter_id, &cert) {
+                                warn!(%meter_id, error = %e, "failed to store meter certificate");
+                                return Err(io::Error::new(io::ErrorKind::Other, "storage failure"));
+                            }
+                            // 7. Send certificate (our "attestation success" signal)
+                            stream.write_u16(cert.len() as u16).await?;
+                            stream.write_all(&cert).await?;
+                        }
+                        Err(e) => {
+                            warn!(%meter_id, error = %e, "key certification failed");
+                            return Err(io::Error::new(io::ErrorKind::PermissionDenied, "certification failed"));
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!(%meter_id, error = %e, "remote attestation failed");
+                    return Err(io::Error::new(io::ErrorKind::PermissionDenied, "attestation failed"));
+                }
+            }
+        }
+    }
 
     debug!(meter_id = %meter_id, %peer, "accepted meter connection");
     let handle = cm
