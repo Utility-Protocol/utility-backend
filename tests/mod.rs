@@ -1,4 +1,5 @@
 pub mod api_tests;
+pub mod gateway;
 pub mod gateway_tests;
 pub mod settlement;
 pub mod soroban_tests;
