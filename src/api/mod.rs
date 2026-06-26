@@ -1,3 +1,4 @@
+use crate::api::middleware::DynamicRateLimiter;
 use crate::gateway::lock::AdvisoryLock;
 use crate::soroban::sequencer::NonceSequencer;
 use axum::extract::FromRef;
@@ -16,6 +17,7 @@ pub struct AppState {
     pub db_pool: Pool<Postgres>,
     pub advisory_lock: Arc<AdvisoryLock>,
     pub rate_limiter: Arc<middleware::RateLimiter>,
+    pub rate_limiter: Arc<DynamicRateLimiter>,
 }
 
 impl FromRef<AppState> for Arc<NonceSequencer> {
@@ -37,6 +39,7 @@ impl FromRef<AppState> for Arc<AdvisoryLock> {
 }
 
 impl FromRef<AppState> for Arc<middleware::RateLimiter> {
+impl FromRef<AppState> for Arc<DynamicRateLimiter> {
     fn from_ref(state: &AppState) -> Self {
         state.rate_limiter.clone()
     }

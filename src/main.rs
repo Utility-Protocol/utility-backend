@@ -4,6 +4,7 @@ use std::time::Duration;
 use tracing_subscriber::EnvFilter;
 
 use utility_backend::api::middleware::RateLimiter;
+use utility_backend::api::middleware::DynamicRateLimiter;
 use utility_backend::api::AppState;
 use utility_backend::gateway::lock::AdvisoryLock;
 use utility_backend::soroban::sequencer::NonceSequencer;
