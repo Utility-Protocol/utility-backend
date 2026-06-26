@@ -1,7 +1,8 @@
 pub mod api_tests;
 pub mod gateway;
 pub mod gateway_tests;
-pub mod memory;
+pub mod ingestion;
+pub mod ratelimit;
 pub mod settlement;
 pub mod soroban_tests;
 pub mod storage;
