@@ -7,3 +7,7 @@ min_age_hours = 6
 ntp_sample_interval_s = 30
 max_correction_ppm = 500
 cross_collector_sync_interval_s = 60
+
+[tracing.soroban_propagation]
+enabled = true
+poll_interval_ms = 500
