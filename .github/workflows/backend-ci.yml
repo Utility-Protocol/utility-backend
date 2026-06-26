@@ -63,7 +63,9 @@ jobs:
 
       - name: Run database migrations
         run: |
-          PGPASSWORD=utility_secret psql -h localhost -U utility -d utility_test -f src/time_series/compress.sql 2>&1 || true
+          PGPASSWORD=utility_secret psql -h localhost -U utility -d utility_test -f src/time_series/compress.sql
+          PGPASSWORD=utility_secret psql -h localhost -U utility -d utility_test -f src/soroban/sync.sql
+          PGPASSWORD=utility_secret psql -h localhost -U utility -d utility_test -f src/settlement/schema.sql
         env:
           PGPASSWORD: utility_secret
 

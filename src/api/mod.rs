@@ -43,6 +43,9 @@ impl FromRef<AppState> for Arc<AdvisoryLock> {
 impl FromRef<AppState> for Arc<Mutex<CircuitBreaker>> {
     fn from_ref(state: &AppState) -> Self {
         state.breaker.clone()
+    }
+}
+
 impl FromRef<AppState> for Arc<DynamicRateLimiter> {
     fn from_ref(state: &AppState) -> Self {
         state.rate_limiter.clone()
