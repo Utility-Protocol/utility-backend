@@ -1,8 +1,10 @@
 //! Storage backends.
 //!
+//! * [`checkpoint`] — durable shutdown checkpoint for crash-safe resume.
 //! * [`durable_queue`] — disk-backed spillover queue for the cross-shard
 //!   credit-flow protocol.
 //! * [`timescaledb`] — workload-priority-partitioned connection pooling.
 
+pub mod checkpoint;
 pub mod durable_queue;
 pub mod timescaledb;
