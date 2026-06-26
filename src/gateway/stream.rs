@@ -264,7 +264,8 @@ impl<T: SpillCodec + Send> SpillStore<T> for FileSpillStore<T> {
             std::io::Error::new(std::io::ErrorKind::InvalidInput, "record too large")
         })?;
         let mut log = self.inner.lock();
-        log.file.seek(SeekFrom::Start(log.write_pos))?;
+        let write_pos = log.write_pos;
+        log.file.seek(SeekFrom::Start(write_pos))?;
         log.file.write_all(&len.to_le_bytes())?;
         log.file.write_all(&bytes)?;
         log.file.flush()?;
@@ -278,7 +279,8 @@ impl<T: SpillCodec + Send> SpillStore<T> for FileSpillStore<T> {
         if log.read_pos >= log.write_pos {
             return Ok(None);
         }
-        log.file.seek(SeekFrom::Start(log.read_pos))?;
+        let read_pos = log.read_pos;
+        log.file.seek(SeekFrom::Start(read_pos))?;
         let mut len_buf = [0u8; 4];
         log.file.read_exact(&mut len_buf)?;
         let len = u32::from_le_bytes(len_buf) as usize;
