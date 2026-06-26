@@ -1,1 +1,1 @@
-pub mod adaptive_backpressure_test;
+pub mod stream_test;

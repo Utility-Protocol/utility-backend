@@ -2,6 +2,7 @@ pub mod api;
 pub mod blockchain;
 pub mod gateway;
 pub mod ingestion;
+pub mod lifecycle;
 pub mod memory;
 pub mod ratelimit;
 pub mod settlement;
