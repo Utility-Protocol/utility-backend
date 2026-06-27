@@ -108,19 +108,36 @@ impl SorobanClient {
             .call_rpc(&self.rpc_url, payload)
             .await?;
         let result = resp.result.ok_or("missing result")?;
-        let events = result
-            .as_array()
-            .ok_or("missing events array")?;
+        let events = result.as_array().ok_or("missing events array")?;
 
         let mut out = Vec::with_capacity(events.len());
         for entry in events {
-            let event_type = entry.get("type").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let contract_id = entry.get("contractId").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let value = entry.get("value").and_then(|v| v.get("xdr")).and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let event_type = entry
+                .get("type")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let contract_id = entry
+                .get("contractId")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let value = entry
+                .get("value")
+                .and_then(|v| v.get("xdr"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
 
             // Simplified parsing for topics
-            let topics = entry.get("topic").and_then(|v| v.as_array())
-                .map(|a| a.iter().filter_map(|t| t.as_str().map(|s| s.to_string())).collect())
+            let topics = entry
+                .get("topic")
+                .and_then(|v| v.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|t| t.as_str().map(|s| s.to_string()))
+                        .collect()
+                })
                 .unwrap_or_default();
 
             out.push(crate::tracing::soroban_propagator::SorobanEvent {

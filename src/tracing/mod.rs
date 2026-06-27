@@ -1,7 +1,7 @@
-pub mod soroban_propagator;
 pub mod exporters;
+pub mod soroban_propagator;
 
-use opentelemetry::trace::{TraceContextExt, Tracer};
+use opentelemetry::trace::TraceContextExt;
 use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 

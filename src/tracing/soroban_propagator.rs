@@ -1,5 +1,5 @@
-use opentelemetry::trace::{SpanContext, TraceId, SpanId, TraceFlags};
 use hex;
+use opentelemetry::trace::{SpanContext, SpanId, TraceFlags, TraceId};
 
 pub struct SorobanEvent {
     pub event_type: String,
@@ -18,8 +18,8 @@ pub struct SorobanEvent {
 /// For now, we will follow the 32+8+1 byte structure and hex-encode it.
 pub fn inject_context(span_context: &SpanContext) -> String {
     let trace_id = span_context.trace_id().to_bytes(); // 16 bytes
-    let span_id = span_context.span_id().to_bytes();   // 8 bytes
-    let flags = span_context.trace_flags().to_u8();    // 1 byte
+    let span_id = span_context.span_id().to_bytes(); // 8 bytes
+    let flags = span_context.trace_flags().to_u8(); // 1 byte
 
     let mut combined = [0u8; 41];
     // Pad 16-byte OTel TraceId to 32 bytes by prefixing with zeros
