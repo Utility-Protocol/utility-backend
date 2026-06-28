@@ -1,15 +1,15 @@
+use p256::ecdsa::{signature::Signer, Signature, SigningKey};
+use sha2::{Digest, Sha256};
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
-use std::collections::HashSet;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use p256::ecdsa::{SigningKey, signature::Signer, Signature};
-use sha2::{Digest, Sha256};
 
 use utility_backend::identity::attestation::{AttestationVerifier, IdentityConfig};
 use utility_backend::identity::cert_store::CertStore;
 use utility_backend::identity::signer::MeterSigner;
-use utility_backend::transport::tcp::acceptor::{bind_listener, accept_and_register};
+use utility_backend::transport::tcp::acceptor::{accept_and_register, bind_listener};
 use utility_backend::transport::tcp::connection_manager::ConnectionManager;
 use utility_backend::transport::tcp::rate_limiter::ConnectionRateLimiter;
 
@@ -51,7 +51,7 @@ async fn test_attestation_and_signature_flow() -> anyhow::Result<()> {
 
             let mut hasher = Sha256::new();
             hasher.update(meter_id.as_bytes());
-            hasher.update(&nonce);
+            hasher.update(nonce);
             let quote = hasher.finalize();
 
             stream.write_u16(quote.len() as u16).await.unwrap();
@@ -72,13 +72,8 @@ async fn test_attestation_and_signature_flow() -> anyhow::Result<()> {
         }
     });
 
-    let (accepted_meter_id, _handle) = accept_and_register(
-        &listener,
-        &cm,
-        &limiter,
-        Some(&verifier),
-        Some(&cert_store),
-    ).await?;
+    let (accepted_meter_id, _handle) =
+        accept_and_register(&listener, &cm, &limiter, Some(&verifier), Some(&cert_store)).await?;
 
     assert_eq!(accepted_meter_id, meter_id);
 
@@ -88,14 +83,19 @@ async fn test_attestation_and_signature_flow() -> anyhow::Result<()> {
     let signature: Signature = signing_key.sign(data);
     let signature_bytes: [u8; 64] = signature.to_bytes().as_slice().try_into().unwrap();
 
-    meter_signer.verify_signature(&meter_id, data, &signature_bytes).expect("Signature verification failed");
+    meter_signer
+        .verify_signature(&meter_id, data, &signature_bytes)
+        .expect("Signature verification failed");
 
     let mut revoked = HashSet::new();
     revoked.insert(meter_id.clone());
     cert_store.update_crl(revoked)?;
 
     let result = meter_signer.verify_signature(&meter_id, data, &signature_bytes);
-    assert!(result.is_err(), "Signature verification should fail for revoked meter");
+    assert!(
+        result.is_err(),
+        "Signature verification should fail for revoked meter"
+    );
 
     Ok(())
 }

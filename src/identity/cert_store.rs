@@ -1,12 +1,12 @@
+use parking_lot::RwLock;
+use rocksdb::{ColumnFamilyDescriptor, Options, DB};
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
-use parking_lot::RwLock;
-use rocksdb::{ColumnFamilyDescriptor, Options, DB};
 use tracing::{info, warn};
 
-use crate::transport::tcp::connection_manager::MeterId;
 use super::Result;
+use crate::transport::tcp::connection_manager::MeterId;
 
 pub struct CertStore {
     db: Arc<DB>,
@@ -31,9 +31,12 @@ impl CertStore {
     }
 
     pub fn store_certificate(&self, meter_id: &MeterId, cert_bytes: &[u8]) -> Result<()> {
-        let cf = self.db.cf_handle("certificates")
+        let cf = self
+            .db
+            .cf_handle("certificates")
             .ok_or_else(|| super::IdentityError::Internal("Missing certificates CF".into()))?;
-        self.db.put_cf(cf, meter_id.as_bytes(), cert_bytes)
+        self.db
+            .put_cf(cf, meter_id.as_bytes(), cert_bytes)
             .map_err(|e| super::IdentityError::Internal(e.to_string()))
     }
 
@@ -47,11 +50,14 @@ impl CertStore {
     }
 
     pub fn update_crl(&self, revoked_ids: HashSet<MeterId>) -> Result<()> {
-        let cf = self.db.cf_handle("crl")
+        let cf = self
+            .db
+            .cf_handle("crl")
             .ok_or_else(|| super::IdentityError::Internal("Missing crl CF".into()))?;
 
         for id in &revoked_ids {
-            self.db.put_cf(cf, id.as_bytes(), b"")
+            self.db
+                .put_cf(cf, id.as_bytes(), b"")
                 .map_err(|e| super::IdentityError::Internal(e.to_string()))?;
         }
 
@@ -61,10 +67,7 @@ impl CertStore {
         Ok(())
     }
 
-    pub async fn spawn_crl_refresh_task(
-        self: Arc<Self>,
-        interval: Duration,
-    ) {
+    pub async fn spawn_crl_refresh_task(self: Arc<Self>, interval: Duration) {
         let mut timer = tokio::time::interval(interval);
         loop {
             timer.tick().await;
