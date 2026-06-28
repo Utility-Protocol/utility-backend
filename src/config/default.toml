@@ -13,3 +13,6 @@ cross_collector_sync_interval_s = 60
 attestation_enabled = true
 crl_refresh_interval_s = 300
 max_attestation_time_ms = 5000
+[tracing.soroban_propagation]
+enabled = true
+poll_interval_ms = 500

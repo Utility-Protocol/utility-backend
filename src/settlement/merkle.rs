@@ -90,6 +90,10 @@ impl MerkleTree {
         self.leaf_count
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.leaf_count == 0
+    }
+
     pub fn prove(&self, leaf_index: usize) -> Option<MerkleProof> {
         if leaf_index >= self.leaf_count {
             return None;

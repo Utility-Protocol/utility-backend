@@ -135,6 +135,11 @@ impl ConnectionManager {
         self.active.len()
     }
 
+    /// Returns `true` if there are no active connections.
+    pub fn is_empty(&self) -> bool {
+        self.active.is_empty()
+    }
+
     /// Whether the registry is at or above its configured capacity.
     pub fn at_capacity(&self) -> bool {
         self.active.len() >= self.max_connections
