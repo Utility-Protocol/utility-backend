@@ -111,14 +111,17 @@ pub async fn accept_and_register(
             stream.read_exact(&mut sig_bytes).await?;
 
             // 5. Verify quote
-            match verifier.verify_quote(&quote, meter_id.clone(), &nonce).await {
+            match verifier
+                .verify_quote(&quote, meter_id.clone(), &nonce)
+                .await
+            {
                 Ok(_) => {
                     // 6. Certify public key and store it
                     match verifier.certify_key(meter_id.clone(), &pk_bytes, &sig_bytes) {
                         Ok(cert) => {
                             if let Err(e) = store.store_certificate(&meter_id, &cert) {
                                 warn!(%meter_id, error = %e, "failed to store meter certificate");
-                                return Err(io::Error::new(io::ErrorKind::Other, "storage failure"));
+                                return Err(io::Error::other("storage failure"));
                             }
                             // 7. Send certificate (our "attestation success" signal)
                             stream.write_u16(cert.len() as u16).await?;
@@ -126,13 +129,19 @@ pub async fn accept_and_register(
                         }
                         Err(e) => {
                             warn!(%meter_id, error = %e, "key certification failed");
-                            return Err(io::Error::new(io::ErrorKind::PermissionDenied, "certification failed"));
+                            return Err(io::Error::new(
+                                io::ErrorKind::PermissionDenied,
+                                "certification failed",
+                            ));
                         }
                     }
                 }
                 Err(e) => {
                     warn!(%meter_id, error = %e, "remote attestation failed");
-                    return Err(io::Error::new(io::ErrorKind::PermissionDenied, "attestation failed"));
+                    return Err(io::Error::new(
+                        io::ErrorKind::PermissionDenied,
+                        "attestation failed",
+                    ));
                 }
             }
         }

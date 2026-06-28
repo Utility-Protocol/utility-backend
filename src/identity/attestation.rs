@@ -1,11 +1,11 @@
-use std::time::{Duration, SystemTime};
+use p256::ecdsa::VerifyingKey;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::time::{Duration, SystemTime};
 use x509_cert::time::{Time, Validity};
-use p256::ecdsa::VerifyingKey;
 
-use crate::transport::tcp::connection_manager::MeterId;
 use super::{IdentityError, Result};
+use crate::transport::tcp::connection_manager::MeterId;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AttestationReport {
@@ -51,11 +51,13 @@ impl AttestationVerifier {
         let expected_report_data = hasher.finalize();
 
         if quote.len() < 32 {
-             return Err(IdentityError::AttestationFailed("Quote too short".into()));
+            return Err(IdentityError::AttestationFailed("Quote too short".into()));
         }
         let report_data = &quote[quote.len() - 32..];
         if report_data != expected_report_data.as_slice() {
-            return Err(IdentityError::AttestationFailed("Report data mismatch".into()));
+            return Err(IdentityError::AttestationFailed(
+                "Report data mismatch".into(),
+            ));
         }
 
         Ok(AttestationReport {
