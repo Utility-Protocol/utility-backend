@@ -1,7 +1,6 @@
 use axum::{
     body::Body,
-    extract::ConnectInfo,
-    extract::State,
+    extract::{ConnectInfo, State},
     http::{Request, StatusCode},
     middleware::Next,
     response::Response,
@@ -12,7 +11,7 @@ use std::collections::VecDeque;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use tokio::time::{Duration, Instant};
+use std::time::{Duration, Instant};
 use tracing::warn;
 
 lazy_static::lazy_static! {
@@ -24,10 +23,10 @@ fn now_ns() -> u64 {
 }
 
 pub struct TokenBucket {
-    tokens: AtomicU64,
-    max_tokens: u64,
+    pub(crate) tokens: AtomicU64,
+    pub(crate) max_tokens: u64,
     pub(crate) refill_rate: u64,
-    last_refill_ns: AtomicU64,
+    pub(crate) last_refill_ns: AtomicU64,
 }
 
 impl TokenBucket {
@@ -129,12 +128,12 @@ pub struct FraudContext {
 }
 
 pub struct DynamicRateLimiter {
-    global_bucket: TokenBucket,
-    per_source_buckets: DashMap<String, Arc<TokenBucket>>,
-    sliding_windows: DashMap<String, Arc<Mutex<SlidingWindow>>>,
-    fraud_contexts: DashMap<String, Arc<Mutex<FraudContext>>>,
-    rejection_counts: DashMap<String, u64>,
-    last_accessed: DashMap<String, Instant>,
+    pub(crate) global_bucket: TokenBucket,
+    pub(crate) per_source_buckets: DashMap<String, Arc<TokenBucket>>,
+    pub(crate) sliding_windows: DashMap<String, Arc<Mutex<SlidingWindow>>>,
+    pub(crate) fraud_contexts: DashMap<String, Arc<Mutex<FraudContext>>>,
+    pub(crate) rejection_counts: DashMap<String, u64>,
+    pub(crate) last_accessed: DashMap<String, Instant>,
 }
 
 impl DynamicRateLimiter {

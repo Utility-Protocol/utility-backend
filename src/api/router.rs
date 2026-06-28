@@ -32,10 +32,6 @@ pub async fn build_router(state: AppState) -> anyhow::Result<Router> {
         .route("/api/v1/meters/rotate-key", post(handlers::rotate_key))
         .route("/api/v1/nonce/status", get(handlers::nonce_status))
         .route("/api/v1/gateway/locks", get(handlers::list_gateway_locks))
-        .route(
-            "/api/v1/rate-limiter/status",
-            get(handlers::rate_limiter_status),
-        )
         .route("/metrics", get(handlers::metrics_handler))
         .route("/debug/clock_state", get(handlers::clock_state))
         .route(
@@ -45,6 +41,10 @@ pub async fn build_router(state: AppState) -> anyhow::Result<Router> {
         .route(
             "/api/v1/database/compression/status",
             get(handlers::compression_status),
+        )
+        .route(
+            "/api/v1/rate-limiter/status",
+            get(handlers::rate_limiter_status),
         )
         .layer(axum_mw::from_fn_with_state(
             state.clone(),

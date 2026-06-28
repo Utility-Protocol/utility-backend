@@ -56,6 +56,7 @@ async fn main() -> anyhow::Result<()> {
     let advisory_lock = Arc::new(AdvisoryLock::postgres(db_pool.clone()));
     let breaker = Arc::new(Mutex::new(CircuitBreaker::new(5)));
     let rate_limiter = DynamicRateLimiter::new();
+
     let state = AppState {
         sequencer,
         pool: db_pool,

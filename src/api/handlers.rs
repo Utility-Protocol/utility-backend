@@ -339,19 +339,6 @@ pub async fn register_meter(
     }))
 }
 
-#[derive(Deserialize)]
-pub struct RotateKeyRequest {
-    pub meter_id: String,
-    pub new_public_key_hex: String,
-    pub old_signature_hex: String,
-}
-
-#[derive(Serialize)]
-pub struct RotateKeyResponse {
-    pub meter_id: String,
-    pub status: String,
-}
-
 pub async fn rotate_key(
     Json(body): Json<RotateKeyRequest>,
 ) -> Result<Json<RotateKeyResponse>, StatusCode> {
@@ -378,6 +365,19 @@ pub async fn rotate_key(
         meter_id: body.meter_id,
         status: "key-rotated".into(),
     }))
+}
+
+#[derive(Deserialize)]
+pub struct RotateKeyRequest {
+    pub meter_id: String,
+    pub new_public_key_hex: String,
+    pub old_signature_hex: String,
+}
+
+#[derive(Serialize)]
+pub struct RotateKeyResponse {
+    pub meter_id: String,
+    pub status: String,
 }
 
 #[derive(Serialize)]
