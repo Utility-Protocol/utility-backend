@@ -6,7 +6,7 @@ use axum::{
 use tower_http::cors::CorsLayer;
 
 use super::handlers;
-use crate::api::AppState;
+use super::AppState;
 
 pub async fn build_router(state: AppState) -> anyhow::Result<Router> {
     let cors = CorsLayer::permissive();

@@ -45,7 +45,6 @@ pub struct CircuitBreakerSnapshot {
     pub window_size: usize,
 }
 
-#[allow(dead_code)]
 pub struct CircuitBreaker {
     samples: VecDeque<RequestSample>,
     state: CircuitState,

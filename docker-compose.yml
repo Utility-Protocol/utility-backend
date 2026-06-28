@@ -12,6 +12,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./src/time_series/compress.sql:/docker-entrypoint-initdb.d/01-compress.sql
+      - ./src/settlement/schema.sql:/docker-entrypoint-initdb.d/02-settlement.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U utility -d utility_backend"]
       interval: 10s

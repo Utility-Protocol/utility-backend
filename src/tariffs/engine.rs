@@ -13,7 +13,7 @@ pub enum TariffTier {
     Dynamic,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct TariffSchedule {
     pub tier: TariffTier,
     pub rate_per_unit: f64,
@@ -220,7 +220,12 @@ impl TariffEngine {
     pub fn evaluate_context(&self, ctx: TariffContext) -> TariffExplanation {
         let dag = self.dag.read().expect("tariff DAG lock poisoned").clone();
         let explanation = dag.evaluate(&ctx);
-        info!(meter_id = %ctx.meter_id, cost = explanation.total_cost, rules = explanation.applied_rules.len(), "tariff evaluated");
+        info!(
+            meter_id = %ctx.meter_id,
+            cost = explanation.total_cost,
+            rules = explanation.applied_rules.len(),
+            "tariff evaluated"
+        );
         explanation
     }
 
@@ -248,6 +253,28 @@ impl TariffEngine {
             .iter()
             .map(|(ts, vol)| self.evaluate(*ts, *vol))
             .sum()
+    }
+
+    pub async fn evaluate_and_finalize(
+        &self,
+        batch_id: &str,
+        resource_type: &str,
+        readings: &[(DateTime<Utc>, f64)],
+        finalizer: &crate::settlement::finalizer::Finalizer,
+        mint_queue: &crate::settlement::mint_queue::MintQueue,
+        destination_wallet: &str,
+    ) -> Result<f64, Box<dyn std::error::Error + Send + Sync>> {
+        let total_cost = self.evaluate_batch(readings);
+
+        // Enqueue the mint event
+        mint_queue
+            .enqueue(batch_id, resource_type, total_cost, destination_wallet)
+            .await?;
+
+        // Trigger finalization
+        finalizer.finalize_mint(batch_id, resource_type).await?;
+
+        Ok(total_cost)
     }
 }
 

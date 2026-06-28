@@ -1,11 +1,13 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::Mutex;
 use tracing_subscriber::EnvFilter;
 
 use utility_backend::api::middleware::DynamicRateLimiter;
 use utility_backend::api::AppState;
 use utility_backend::gateway::lock::AdvisoryLock;
+use utility_backend::soroban::rpc::CircuitBreaker;
 use utility_backend::soroban::sequencer::NonceSequencer;
 use utility_backend::time_series::compression::{
     init_global_compression_manager, spawn_compression_monitor, CompressionPolicy,
@@ -52,11 +54,13 @@ async fn main() -> anyhow::Result<()> {
     let _transport = spawn_transport_monitors(TcpTransportConfig::default());
 
     let advisory_lock = Arc::new(AdvisoryLock::postgres(db_pool.clone()));
+    let breaker = Arc::new(Mutex::new(CircuitBreaker::new(5)));
     let rate_limiter = DynamicRateLimiter::new();
     let state = AppState {
         sequencer,
-        db_pool,
+        pool: db_pool,
         advisory_lock,
+        breaker,
         rate_limiter,
     };
 
