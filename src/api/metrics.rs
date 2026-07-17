@@ -312,3 +312,51 @@ pub fn inc_pool_starvation(class: &str) {
         .with_label_values(&[class])
         .inc();
 }
+
+lazy_static! {
+    pub static ref JOB_SCHEDULER_ENQUEUED: Counter = register_counter!(
+        "utility_job_scheduler_enqueued_total",
+        "Total jobs accepted by the distributed job scheduler"
+    )
+    .unwrap();
+    pub static ref JOB_SCHEDULER_CLAIMED: Counter = register_counter!(
+        "utility_job_scheduler_claimed_total",
+        "Total jobs claimed by workers using leases"
+    )
+    .unwrap();
+    pub static ref JOB_SCHEDULER_HEARTBEATS: Counter = register_counter!(
+        "utility_job_scheduler_heartbeats_total",
+        "Total successful job lease heartbeat renewals"
+    )
+    .unwrap();
+    pub static ref JOB_SCHEDULER_COMPLETED: Counter = register_counter!(
+        "utility_job_scheduler_completed_total",
+        "Total jobs completed before lease expiry"
+    )
+    .unwrap();
+    pub static ref JOB_SCHEDULER_FAILED: Counter = register_counter!(
+        "utility_job_scheduler_failed_total",
+        "Total jobs failed or rescheduled by workers"
+    )
+    .unwrap();
+}
+
+pub fn inc_job_scheduler_enqueued() {
+    JOB_SCHEDULER_ENQUEUED.inc();
+}
+
+pub fn inc_job_scheduler_claimed(by: u64) {
+    JOB_SCHEDULER_CLAIMED.inc_by(by as f64);
+}
+
+pub fn inc_job_scheduler_heartbeat() {
+    JOB_SCHEDULER_HEARTBEATS.inc();
+}
+
+pub fn inc_job_scheduler_completed() {
+    JOB_SCHEDULER_COMPLETED.inc();
+}
+
+pub fn inc_job_scheduler_failed() {
+    JOB_SCHEDULER_FAILED.inc();
+}
