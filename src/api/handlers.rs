@@ -187,6 +187,27 @@ pub async fn get_diagnostics(
         .ok_or(StatusCode::NOT_FOUND)
 }
 
+#[derive(Serialize)]
+pub struct CapacityForecastResponse {
+    pub forecasts: Vec<crate::capacity::CapacityForecast>,
+}
+
+pub async fn capacity_forecast() -> Json<CapacityForecastResponse> {
+    let planner =
+        crate::capacity::CapacityPlanner::new(crate::capacity::CapacityPlanningConfig::default());
+    let forecasts = planner.forecast(&crate::capacity::sample_usage_window(chrono::Utc::now()));
+    for forecast in &forecasts {
+        metrics::set_capacity_forecast(
+            &forecast.service,
+            &format!("{:?}", forecast.resource),
+            forecast.current_utilization,
+            forecast.projected_utilization,
+            forecast.days_to_critical,
+        );
+    }
+    Json(CapacityForecastResponse { forecasts })
+}
+
 pub async fn metrics_handler() -> impl IntoResponse {
     use prometheus::TextEncoder;
     let encoder = TextEncoder::new();
