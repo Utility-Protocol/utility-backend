@@ -87,6 +87,19 @@ lazy_static! {
         "Number of TCP connections reset because their reassembly buffer exceeded the configured maximum"
     )
     .unwrap();
+
+    pub static ref E2EE_FIELD_OPERATIONS: CounterVec = register_counter_vec!(
+        "utility_e2ee_field_operations_total",
+        "Total sensitive-field encryption and decryption operations",
+        &["operation", "status"]
+    )
+    .unwrap();
+    pub static ref E2EE_FIELD_LATENCY: HistogramVec = register_histogram_vec!(
+        "utility_e2ee_field_latency_seconds",
+        "Sensitive-field encryption and decryption latency in seconds",
+        &["operation"]
+    )
+    .unwrap();
 }
 
 pub fn record_ingestion(meter_id: &str, status: &str) {
@@ -311,4 +324,14 @@ pub fn inc_pool_starvation(class: &str) {
     POOL_CLASS_STARVATION_EVENTS
         .with_label_values(&[class])
         .inc();
+}
+
+pub fn record_e2ee_operation(operation: &str, success: bool, latency_seconds: f64) {
+    let status = if success { "success" } else { "failure" };
+    E2EE_FIELD_OPERATIONS
+        .with_label_values(&[operation, status])
+        .inc();
+    E2EE_FIELD_LATENCY
+        .with_label_values(&[operation])
+        .observe(latency_seconds);
 }
