@@ -74,6 +74,14 @@ jobs:
         env:
           DATABASE_URL: postgres://utility:utility_secret@localhost:5432/utility_test
 
+      - name: Install cargo-tarpaulin
+        uses: taiki-e/install-action@cargo-tarpaulin
+
+      - name: Run code coverage with threshold enforcement
+        run: cargo tarpaulin --lib --all-features --fail-under 80 --engine llvm --verbose
+        env:
+          DATABASE_URL: postgres://utility:utility_secret@localhost:5432/utility_test
+
   docker-build:
     runs-on: ubuntu-latest
     steps:
