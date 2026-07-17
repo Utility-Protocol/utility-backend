@@ -82,6 +82,25 @@ lazy_static! {
         "Number of TCP frames rejected because their payload exceeded the configured maximum"
     )
     .unwrap();
+
+    pub static ref RESILIENCE_IN_FLIGHT: Gauge = register_gauge!(
+        "utility_resilience_in_flight_requests",
+        "Current in-flight requests tracked by the resilience admission controller"
+    )
+    .unwrap();
+    pub static ref RESILIENCE_CAPACITY_TIER: GaugeVec = register_gauge_vec!(
+        "utility_resilience_capacity_tier",
+        "Active capacity tier as a one-hot gauge labelled by tier" ,
+        &["tier"]
+    )
+    .unwrap();
+    pub static ref RESILIENCE_SHED_REQUESTS: CounterVec = register_counter_vec!(
+        "utility_resilience_shed_requests_total",
+        "Requests rejected by feature flags or capacity shedding",
+        &["feature", "tier"]
+    )
+    .unwrap();
+
     pub static ref TCP_BUFFER_EXCEEDED_RESETS: Counter = register_counter!(
         "tcp_buffer_exceeded_resets",
         "Number of TCP connections reset because their reassembly buffer exceeded the configured maximum"
@@ -310,5 +329,46 @@ pub fn inc_priority_inheritance() {
 pub fn inc_pool_starvation(class: &str) {
     POOL_CLASS_STARVATION_EVENTS
         .with_label_values(&[class])
+        .inc();
+}
+
+pub fn set_resilience_in_flight(count: f64) {
+    RESILIENCE_IN_FLIGHT.set(count);
+}
+
+pub fn set_resilience_capacity_tier(tier: crate::resilience::CapacityTier) {
+    for name in ["normal", "degraded", "shed"] {
+        RESILIENCE_CAPACITY_TIER.with_label_values(&[name]).set(0.0);
+    }
+    let active = match tier {
+        crate::resilience::CapacityTier::Normal => "normal",
+        crate::resilience::CapacityTier::Degraded => "degraded",
+        crate::resilience::CapacityTier::Shed => "shed",
+    };
+    RESILIENCE_CAPACITY_TIER
+        .with_label_values(&[active])
+        .set(1.0);
+}
+
+pub fn inc_resilience_shed(
+    feature: Option<crate::resilience::FeatureFlag>,
+    tier: crate::resilience::CapacityTier,
+) {
+    let feature = match feature {
+        Some(crate::resilience::FeatureFlag::MeterReads) => "meter_reads",
+        Some(crate::resilience::FeatureFlag::TariffExplain) => "tariff_explain",
+        Some(crate::resilience::FeatureFlag::Settlement) => "settlement",
+        Some(crate::resilience::FeatureFlag::Diagnostics) => "diagnostics",
+        Some(crate::resilience::FeatureFlag::CompressionStatus) => "compression_status",
+        Some(crate::resilience::FeatureFlag::TelemetryTrace) => "telemetry_trace",
+        None => "unclassified",
+    };
+    let tier = match tier {
+        crate::resilience::CapacityTier::Normal => "normal",
+        crate::resilience::CapacityTier::Degraded => "degraded",
+        crate::resilience::CapacityTier::Shed => "shed",
+    };
+    RESILIENCE_SHED_REQUESTS
+        .with_label_values(&[feature, tier])
         .inc();
 }
