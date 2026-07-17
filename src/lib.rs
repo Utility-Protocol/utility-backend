@@ -6,6 +6,7 @@ pub mod ingestion;
 pub mod lifecycle;
 pub mod memory;
 pub mod ratelimit;
+pub mod secrets;
 pub mod settlement;
 pub mod soroban;
 pub mod storage;
