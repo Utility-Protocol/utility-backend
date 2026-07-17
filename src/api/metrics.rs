@@ -87,6 +87,28 @@ lazy_static! {
         "Number of TCP connections reset because their reassembly buffer exceeded the configured maximum"
     )
     .unwrap();
+
+    pub static ref SECRET_ROTATION_TOTAL: CounterVec = register_counter_vec!(
+        "utility_secret_rotation_total",
+        "Total secret rotation attempts by secret name and status",
+        &["secret", "status"]
+    )
+    .unwrap();
+    pub static ref SECRET_ROTATION_DURATION_MS: HistogramVec = register_histogram_vec!(
+        "utility_secret_rotation_duration_ms",
+        "Secret rotation duration in milliseconds",
+        &["secret", "status"]
+    )
+    .unwrap();
+}
+
+pub fn record_secret_rotation(secret: &str, status: &str, duration_ms: f64) {
+    SECRET_ROTATION_TOTAL
+        .with_label_values(&[secret, status])
+        .inc();
+    SECRET_ROTATION_DURATION_MS
+        .with_label_values(&[secret, status])
+        .observe(duration_ms);
 }
 
 pub fn record_ingestion(meter_id: &str, status: &str) {

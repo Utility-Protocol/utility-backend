@@ -4,6 +4,7 @@ pub mod gateway_tests;
 pub mod identity;
 pub mod ingestion;
 pub mod ratelimit;
+pub mod secrets;
 pub mod settlement;
 pub mod soroban_tests;
 pub mod storage;
