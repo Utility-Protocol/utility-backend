@@ -312,3 +312,58 @@ pub fn inc_pool_starvation(class: &str) {
         .with_label_values(&[class])
         .inc();
 }
+
+lazy_static! {
+    pub static ref DLQ_MESSAGES_COUNT: GaugeVec = register_gauge_vec!(
+        "utility_dlq_messages_count",
+        "Current number of failed messages in the Dead Letter Queue",
+        &["queue_name", "status"]
+    )
+    .unwrap();
+    pub static ref DLQ_RETRIES_TOTAL: CounterVec = register_counter_vec!(
+        "utility_dlq_retries_total",
+        "Total number of DLQ message retry attempts",
+        &["queue_name", "result"]
+    )
+    .unwrap();
+}
+
+pub fn set_dlq_messages_count(queue_name: &str, status: &str, count: f64) {
+    DLQ_MESSAGES_COUNT
+        .with_label_values(&[queue_name, status])
+        .set(count);
+}
+
+pub fn record_dlq_retry(queue_name: &str, result: &str) {
+    DLQ_RETRIES_TOTAL
+        .with_label_values(&[queue_name, result])
+        .inc();
+}
+
+pub fn spawn_dlq_metrics_poller(pool: sqlx::PgPool, interval: std::time::Duration) {
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(interval);
+        loop {
+            ticker.tick().await;
+
+            let rows = sqlx::query_as::<_, (String, String, i64)>(
+                "SELECT queue_name, status, COUNT(*) FROM dead_letter_queue GROUP BY queue_name, status"
+            )
+            .fetch_all(&pool)
+            .await;
+
+            match rows {
+                Ok(counts) => {
+                    // Reset gauge to zero first if needed or just update seen ones.
+                    // Since Prometheus gauges retain their values, we update seen combinations:
+                    for (q_name, status, count) in counts {
+                        set_dlq_messages_count(&q_name, &status, count as f64);
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("failed to poll DLQ metrics: {}", e);
+                }
+            }
+        }
+    });
+}

@@ -392,3 +392,98 @@ pub async fn rate_limiter_status(
         top_sources: limiter.get_status(),
     })
 }
+
+#[derive(Deserialize)]
+pub struct DlqListQuery {
+    pub status: Option<String>,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
+
+pub async fn list_dlq(
+    State(pool): State<Pool<Postgres>>,
+    Query(query): Query<DlqListQuery>,
+) -> Result<Json<Vec<crate::settlement::dlq::DlqMessage>>, StatusCode> {
+    let limit = query.limit.unwrap_or(50);
+    let offset = query.offset.unwrap_or(0);
+    match crate::settlement::dlq::list_dlq(&pool, query.status.as_deref(), limit, offset).await {
+        Ok(msgs) => Ok(Json(msgs)),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to list DLQ");
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+pub async fn get_dlq(
+    State(pool): State<Pool<Postgres>>,
+    Path(id): Path<uuid::Uuid>,
+) -> Result<Json<crate::settlement::dlq::DlqMessage>, StatusCode> {
+    match crate::settlement::dlq::get_dlq_by_id(&pool, id).await {
+        Ok(Some(msg)) => Ok(Json(msg)),
+        Ok(None) => Err(StatusCode::NOT_FOUND),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to get DLQ message");
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+pub async fn delete_dlq(
+    State(pool): State<Pool<Postgres>>,
+    Path(id): Path<uuid::Uuid>,
+) -> Result<StatusCode, StatusCode> {
+    match crate::settlement::dlq::delete_dlq_message(&pool, id).await {
+        Ok(true) => Ok(StatusCode::NO_CONTENT),
+        Ok(false) => Err(StatusCode::NOT_FOUND),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to delete DLQ message");
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+pub async fn retry_dlq(
+    State(state): State<AppState>,
+    Path(id): Path<uuid::Uuid>,
+) -> Result<Json<&'static str>, StatusCode> {
+    let msg = match crate::settlement::dlq::get_dlq_by_id(&state.pool, id).await {
+        Ok(Some(m)) => m,
+        Ok(None) => return Err(StatusCode::NOT_FOUND),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to get DLQ message");
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
+
+    let batch_id = msg.payload.get("batch_id").and_then(|v| v.as_str());
+    let resource_type = msg.payload.get("resource_type").and_then(|v| v.as_str());
+
+    let (batch_id, resource_type) = match (batch_id, resource_type) {
+        (Some(b), Some(r)) => (b, r),
+        _ => return Err(StatusCode::BAD_REQUEST),
+    };
+
+    let rpc_url = std::env::var("SOROBAN_RPC_URL").unwrap_or_else(|_| "http://localhost:8000".into());
+    let finalizer = crate::settlement::finalizer::Finalizer::new(
+        state.pool.clone(),
+        rpc_url,
+        state.breaker.clone(),
+    );
+
+    let _ = crate::settlement::dlq::update_dlq_status(&state.pool, id, "retrying").await;
+
+    match finalizer.finalize_mint(batch_id, resource_type).await {
+        Ok(_) => {
+            let _ = crate::settlement::dlq::delete_dlq_message(&state.pool, id).await;
+            crate::api::metrics::record_dlq_retry(&msg.queue_name, "success");
+            Ok(Json("retry successful, message resolved"))
+        }
+        Err(e) => {
+            let _ = crate::settlement::dlq::increment_retry_count(&state.pool, id, Some(&e.to_string())).await;
+            crate::api::metrics::record_dlq_retry(&msg.queue_name, "failure");
+            tracing::error!(error = %e, batch_id = %batch_id, "DLQ manual retry failed");
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}

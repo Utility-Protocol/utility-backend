@@ -40,6 +40,10 @@ async fn main() -> anyhow::Result<()> {
         db_active_connection_poller(metrics_pool).await;
     });
 
+    // Spawn Dead Letter Queue metrics poller
+    let dlq_pool = db_pool.clone();
+    utility_backend::api::metrics::spawn_dlq_metrics_poller(dlq_pool, Duration::from_secs(10));
+
     // Initialise the global compression policy manager and spawn its
     // background monitoring task.
     let compression_manager = Arc::new(CompressionPolicyManager::new(
