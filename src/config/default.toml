@@ -16,3 +16,9 @@ max_attestation_time_ms = 5000
 [tracing.soroban_propagation]
 enabled = true
 poll_interval_ms = 500
+
+[cache]
+default_ttl_ms = 60000
+max_entries = 10000
+redis_url = "redis://127.0.0.1:6379/0"
+namespace = "utility-backend"

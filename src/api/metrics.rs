@@ -312,3 +312,26 @@ pub fn inc_pool_starvation(class: &str) {
         .with_label_values(&[class])
         .inc();
 }
+
+lazy_static! {
+    pub static ref CACHE_HITS: CounterVec = register_counter_vec!(
+        "utility_cache_hits_total",
+        "Total cache hits by cache tier",
+        &["tier"]
+    )
+    .unwrap();
+    pub static ref CACHE_MISSES: CounterVec = register_counter_vec!(
+        "utility_cache_misses_total",
+        "Total cache misses by cache tier",
+        &["tier"]
+    )
+    .unwrap();
+}
+
+pub fn record_cache_hit(tier: &str) {
+    CACHE_HITS.with_label_values(&[tier]).inc();
+}
+
+pub fn record_cache_miss(tier: &str) {
+    CACHE_MISSES.with_label_values(&[tier]).inc();
+}
