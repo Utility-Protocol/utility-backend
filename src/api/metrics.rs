@@ -87,6 +87,19 @@ lazy_static! {
         "Number of TCP connections reset because their reassembly buffer exceeded the configured maximum"
     )
     .unwrap();
+    pub static ref MESH_MTLS_HANDSHAKES: CounterVec = register_counter_vec!(
+        "utility_mesh_mtls_handshakes_total",
+        "Total service mesh mutual TLS handshakes by peer service and result",
+        &["service", "result"]
+    )
+    .unwrap();
+    pub static ref MESH_MTLS_HANDSHAKE_LATENCY_SECONDS: HistogramVec = register_histogram_vec!(
+        "utility_mesh_mtls_handshake_latency_seconds",
+        "Service mesh mutual TLS handshake latency in seconds",
+        &["service"],
+        vec![0.001, 0.005, 0.01, 0.025, 0.05, 0.075, 0.1]
+    )
+    .unwrap();
 }
 
 pub fn record_ingestion(meter_id: &str, status: &str) {
@@ -122,6 +135,19 @@ pub fn get_starvation_count() -> f64 {
 pub fn record_compaction_attempt() {
     COMPACTION_ATTEMPTS.inc();
 }
+
+pub fn record_mesh_mtls_handshake(service: &str, result: &str) {
+    MESH_MTLS_HANDSHAKES
+        .with_label_values(&[service, result])
+        .inc();
+}
+
+pub fn record_mesh_mtls_handshake_latency(service: &str, latency_seconds: f64) {
+    MESH_MTLS_HANDSHAKE_LATENCY_SECONDS
+        .with_label_values(&[service])
+        .observe(latency_seconds);
+}
+
 pub fn record_tcp_partial_frame_buffered() {
     TCP_PARTIAL_FRAMES_BUFFERED.inc();
 }
