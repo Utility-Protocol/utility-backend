@@ -1,4 +1,5 @@
 pub mod api_tests;
+mod chaos;
 pub mod gateway;
 pub mod gateway_tests;
 pub mod identity;
