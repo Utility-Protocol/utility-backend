@@ -21,10 +21,22 @@ docker compose up -d
 
 ## Development
 
+Install the local quality gate once per checkout:
+
 ```bash
+python -m pip install pre-commit
+pre-commit install --install-hooks
+```
+
+Run the same fast checks manually before opening a pull request:
+
+```bash
+pre-commit run --all-files
 cargo test --all-features
 cargo clippy --all-targets -- -D warnings
 ```
+
+See [`docs/runbooks/pre-commit-hooks.md`](docs/runbooks/pre-commit-hooks.md) for the hook architecture, rollout plan, and troubleshooting runbook.
 
 ## CI/CD
 
