@@ -1,5 +1,6 @@
 pub mod api;
 pub mod blockchain;
+pub mod config_audit;
 pub mod gateway;
 pub mod identity;
 pub mod ingestion;
