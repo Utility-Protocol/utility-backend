@@ -312,3 +312,42 @@ pub fn inc_pool_starvation(class: &str) {
         .with_label_values(&[class])
         .inc();
 }
+
+lazy_static! {
+    pub static ref CAPACITY_CURRENT_UTILIZATION: GaugeVec = register_gauge_vec!(
+        "utility_capacity_current_utilization_ratio",
+        "Latest observed utilization ratio by service and resource for capacity planning",
+        &["service", "resource"]
+    )
+    .unwrap();
+    pub static ref CAPACITY_PROJECTED_UTILIZATION: GaugeVec = register_gauge_vec!(
+        "utility_capacity_projected_utilization_ratio",
+        "Projected utilization ratio by service and resource over the planning horizon",
+        &["service", "resource"]
+    )
+    .unwrap();
+    pub static ref CAPACITY_DAYS_TO_CRITICAL: GaugeVec = register_gauge_vec!(
+        "utility_capacity_days_to_critical",
+        "Forecasted days until a service resource reaches critical utilization; -1 means not trending toward critical",
+        &["service", "resource"]
+    )
+    .unwrap();
+}
+
+pub fn set_capacity_forecast(
+    service: &str,
+    resource: &str,
+    current: f64,
+    projected: f64,
+    days_to_critical: Option<f64>,
+) {
+    CAPACITY_CURRENT_UTILIZATION
+        .with_label_values(&[service, resource])
+        .set(current);
+    CAPACITY_PROJECTED_UTILIZATION
+        .with_label_values(&[service, resource])
+        .set(projected);
+    CAPACITY_DAYS_TO_CRITICAL
+        .with_label_values(&[service, resource])
+        .set(days_to_critical.unwrap_or(-1.0));
+}
