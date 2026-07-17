@@ -87,6 +87,19 @@ lazy_static! {
         "Number of TCP connections reset because their reassembly buffer exceeded the configured maximum"
     )
     .unwrap();
+
+    pub static ref MIGRATION_STEPS_TOTAL: CounterVec = register_counter_vec!(
+        "utility_migration_steps_total",
+        "Total database migration steps executed by direction",
+        &["direction"]
+    )
+    .unwrap();
+    pub static ref MIGRATION_STEP_DURATION_SECONDS: HistogramVec = register_histogram_vec!(
+        "utility_migration_step_duration_seconds",
+        "Database migration step duration in seconds",
+        &["direction"]
+    )
+    .unwrap();
 }
 
 pub fn record_ingestion(meter_id: &str, status: &str) {
@@ -311,4 +324,11 @@ pub fn inc_pool_starvation(class: &str) {
     POOL_CLASS_STARVATION_EVENTS
         .with_label_values(&[class])
         .inc();
+}
+
+pub fn record_migration_step(direction: &str, duration_seconds: f64) {
+    MIGRATION_STEPS_TOTAL.with_label_values(&[direction]).inc();
+    MIGRATION_STEP_DURATION_SECONDS
+        .with_label_values(&[direction])
+        .observe(duration_seconds);
 }
