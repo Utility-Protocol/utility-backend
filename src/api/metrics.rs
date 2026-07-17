@@ -312,3 +312,37 @@ pub fn inc_pool_starvation(class: &str) {
         .with_label_values(&[class])
         .inc();
 }
+
+lazy_static! {
+    pub static ref WEBHOOK_DELIVERIES: CounterVec = register_counter_vec!(
+        "utility_webhook_deliveries_total",
+        "Total webhook delivery outcomes by endpoint and status",
+        &["endpoint_id", "status"]
+    )
+    .unwrap();
+    pub static ref WEBHOOK_RETRIES: CounterVec = register_counter_vec!(
+        "utility_webhook_retries_total",
+        "Total webhook retry attempts by endpoint",
+        &["endpoint_id"]
+    )
+    .unwrap();
+    pub static ref WEBHOOK_DELIVERY_LATENCY_SECONDS: Histogram = register_histogram!(
+        "utility_webhook_delivery_latency_seconds",
+        "End-to-end webhook delivery latency in seconds"
+    )
+    .unwrap();
+}
+
+pub fn record_webhook_delivery(endpoint_id: &str, status: &str) {
+    WEBHOOK_DELIVERIES
+        .with_label_values(&[endpoint_id, status])
+        .inc();
+}
+
+pub fn record_webhook_retry(endpoint_id: &str) {
+    WEBHOOK_RETRIES.with_label_values(&[endpoint_id]).inc();
+}
+
+pub fn observe_webhook_latency(seconds: f64) {
+    WEBHOOK_DELIVERY_LATENCY_SECONDS.observe(seconds);
+}
