@@ -312,3 +312,39 @@ pub fn inc_pool_starvation(class: &str) {
         .with_label_values(&[class])
         .inc();
 }
+
+lazy_static! {
+    pub static ref CONFIG_AUDIT_SNAPSHOTS_TOTAL: CounterVec = register_counter_vec!(
+        "utility_config_audit_snapshots_total",
+        "Total runtime configuration snapshots captured for auditing",
+        &["service", "environment"]
+    )
+    .unwrap();
+    pub static ref CONFIG_DRIFT_EVENTS_TOTAL: CounterVec = register_counter_vec!(
+        "utility_config_drift_events_total",
+        "Total runtime configuration drift events detected",
+        &["service", "severity"]
+    )
+    .unwrap();
+    pub static ref CONFIG_AUDIT_DURATION_MS: Histogram = register_histogram!(
+        "utility_config_audit_duration_ms",
+        "Runtime configuration audit duration in milliseconds"
+    )
+    .unwrap();
+}
+
+pub fn record_config_audit_snapshot(service: &str, environment: &str) {
+    CONFIG_AUDIT_SNAPSHOTS_TOTAL
+        .with_label_values(&[service, environment])
+        .inc();
+}
+
+pub fn record_config_drift(service: &str, severity: &str) {
+    CONFIG_DRIFT_EVENTS_TOTAL
+        .with_label_values(&[service, severity])
+        .inc();
+}
+
+pub fn record_config_audit_duration(duration_ms: f64) {
+    CONFIG_AUDIT_DURATION_MS.observe(duration_ms);
+}
