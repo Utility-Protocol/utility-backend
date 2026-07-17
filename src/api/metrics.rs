@@ -312,3 +312,37 @@ pub fn inc_pool_starvation(class: &str) {
         .with_label_values(&[class])
         .inc();
 }
+
+lazy_static! {
+    pub static ref BACKUP_VERIFICATION_RUNS: CounterVec = register_counter_vec!(
+        "utility_backup_verification_runs_total",
+        "Total scheduled database backup restore verification runs",
+        &["status"]
+    )
+    .unwrap();
+    pub static ref BACKUP_VERIFICATION_DURATION: Histogram = register_histogram!(
+        "utility_backup_verification_duration_seconds",
+        "Duration of scheduled database backup restore verification runs in seconds"
+    )
+    .unwrap();
+    pub static ref BACKUP_VERIFICATION_LAST_SUCCESS: Gauge = register_gauge!(
+        "utility_backup_verification_last_success_timestamp_seconds",
+        "Unix timestamp for the last successful backup restore verification"
+    )
+    .unwrap();
+}
+
+pub fn record_backup_verification_success(duration_seconds: f64) {
+    BACKUP_VERIFICATION_RUNS
+        .with_label_values(&["success"])
+        .inc();
+    BACKUP_VERIFICATION_DURATION.observe(duration_seconds);
+    BACKUP_VERIFICATION_LAST_SUCCESS.set(chrono::Utc::now().timestamp() as f64);
+}
+
+pub fn record_backup_verification_failure(duration_seconds: f64) {
+    BACKUP_VERIFICATION_RUNS
+        .with_label_values(&["failure"])
+        .inc();
+    BACKUP_VERIFICATION_DURATION.observe(duration_seconds);
+}
