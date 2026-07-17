@@ -9,6 +9,9 @@ use utility_backend::api::AppState;
 use utility_backend::gateway::lock::AdvisoryLock;
 use utility_backend::soroban::rpc::CircuitBreaker;
 use utility_backend::soroban::sequencer::NonceSequencer;
+use utility_backend::storage::backup_verification::{
+    spawn_backup_verification, BackupVerificationConfig, BackupVerifier,
+};
 use utility_backend::time_series::compression::{
     init_global_compression_manager, spawn_compression_monitor, CompressionPolicy,
     CompressionPolicyManager,
@@ -39,6 +42,15 @@ async fn main() -> anyhow::Result<()> {
     tokio::spawn(async move {
         db_active_connection_poller(metrics_pool).await;
     });
+
+    let backup_verification_config = BackupVerificationConfig::from_env();
+    if backup_verification_config.enabled {
+        let backup_verifier =
+            BackupVerifier::new(db_pool.clone(), db_url.clone(), backup_verification_config);
+        spawn_backup_verification(backup_verifier);
+    } else {
+        tracing::info!("scheduled database backup restore verification is disabled");
+    }
 
     // Initialise the global compression policy manager and spawn its
     // background monitoring task.
