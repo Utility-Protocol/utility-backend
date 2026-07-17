@@ -12,6 +12,7 @@ pub mod handlers;
 pub mod metrics;
 pub mod middleware;
 pub mod router;
+pub mod slo_state;
 
 #[derive(Clone)]
 pub struct AppState {

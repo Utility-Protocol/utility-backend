@@ -218,6 +218,12 @@ pub async fn clock_state() -> Json<ClockStateResponse> {
     })
 }
 
+pub async fn slo_status() -> Json<crate::observability::slo::SloStatus> {
+    let status = crate::api::slo_state::global_slo_monitor().lock().status();
+    metrics::publish_slo_status(&status);
+    Json(status)
+}
+
 pub async fn readyz_handler() -> StatusCode {
     let starvation = metrics::get_starvation_count();
     if starvation > 100.0 {
