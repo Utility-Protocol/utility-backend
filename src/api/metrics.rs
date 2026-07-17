@@ -312,3 +312,27 @@ pub fn inc_pool_starvation(class: &str) {
         .with_label_values(&[class])
         .inc();
 }
+
+lazy_static! {
+    pub static ref AUDIT_EVENTS_VERIFIED: Counter = register_counter!(
+        "utility_audit_events_verified_total",
+        "Total audit events verified by hash-chain checks"
+    )
+    .unwrap();
+    pub static ref AUDIT_VERIFICATION_FAILURES: CounterVec = register_counter_vec!(
+        "utility_audit_verification_failures_total",
+        "Total tamper-evident audit hash-chain verification failures",
+        &["reason"]
+    )
+    .unwrap();
+}
+
+pub fn record_audit_verification(events: u64) {
+    AUDIT_EVENTS_VERIFIED.inc_by(events as f64);
+}
+
+pub fn record_audit_verification_failure(reason: &str) {
+    AUDIT_VERIFICATION_FAILURES
+        .with_label_values(&[reason])
+        .inc();
+}
