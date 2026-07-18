@@ -36,7 +36,7 @@ deadpool-postgres = { version = "0.14", default-features = false, features = ["r
 prometheus = { version = "0.13", features = ["process"] }
 lazy_static = "1"
 reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
-rustls = { version = "0.22", features = ["ring", "tls12"] }
+rustls = { version = "0.23", features = ["ring", "tls12"] }
 rustls-pemfile = "2"
 x509-parser = "0.16"
 tokio-rustls = "0.25"

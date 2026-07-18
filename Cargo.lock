@@ -3801,7 +3801,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6b92b125634d9b795e7beca796cc790df15a7fb38323bf3196fda83292d06b1f"
 dependencies = [
  "aws-lc-rs",
+ "log",
  "once_cell",
+ "ring",
  "rustls-pki-types",
  "rustls-webpki 0.103.13",
  "subtle",
@@ -5274,7 +5276,7 @@ dependencies = [
  "reqwest 0.11.27",
  "ring",
  "rocksdb",
- "rustls 0.22.4",
+ "rustls 0.23.41",
  "rustls-pemfile 2.2.0",
  "serde",
  "serde_json",
