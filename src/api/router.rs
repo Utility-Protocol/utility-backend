@@ -6,7 +6,7 @@ use axum::{
 use tower_http::cors::CorsLayer;
 
 use super::handlers;
-use crate::api::AppState;
+use super::AppState;
 
 pub async fn build_router(state: AppState) -> anyhow::Result<Router> {
     let cors = CorsLayer::permissive();
@@ -33,6 +33,7 @@ pub async fn build_router(state: AppState) -> anyhow::Result<Router> {
         .route("/api/v1/nonce/status", get(handlers::nonce_status))
         .route("/api/v1/gateway/locks", get(handlers::list_gateway_locks))
         .route("/metrics", get(handlers::metrics_handler))
+        .route("/debug/clock_state", get(handlers::clock_state))
         .route(
             "/api/v1/telemetry/trace/:trace_id",
             get(crate::gateway::telemetry::get_trace),
@@ -41,7 +42,14 @@ pub async fn build_router(state: AppState) -> anyhow::Result<Router> {
             "/api/v1/database/compression/status",
             get(handlers::compression_status),
         )
-        .layer(axum_mw::from_fn(crate::api::middleware::rate_limit_layer))
+        .route(
+            "/api/v1/rate-limiter/status",
+            get(handlers::rate_limiter_status),
+        )
+        .layer(axum_mw::from_fn_with_state(
+            state.clone(),
+            crate::api::middleware::rate_limit_layer,
+        ))
         .layer(axum_mw::from_fn(
             crate::gateway::telemetry::tracing_middleware,
         ))

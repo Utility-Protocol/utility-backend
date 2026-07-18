@@ -4,14 +4,17 @@ use axum::{
 use ed25519_dalek::VerifyingKey;
 use hex;
 use serde::{Deserialize, Serialize};
+
+use crate::api::AppState;
+
 use sqlx::{Pool, Postgres};
 use std::sync::Arc;
 
 use crate::api::metrics;
+use crate::api::middleware::DynamicRateLimiter;
 use crate::gateway::crypto::global_registry;
 use crate::gateway::hlc::HybridLogicalClock;
 use crate::gateway::lock::{ActiveLock, AdvisoryLock};
-use crate::soroban::sequencer::NonceSequencer;
 use crate::tariffs::engine::{global_tariff_engine, TariffContext, TariffExplanation};
 use crate::time_series::analytics::{global_engine, DiagnosticReport};
 use crate::time_series::compression::CompressionStatus;
@@ -47,10 +50,8 @@ pub struct GridNonceStatus {
     pub high_water_mark: u64,
 }
 
-pub async fn nonce_status(
-    State(sequencer): State<Arc<NonceSequencer>>,
-) -> Json<Vec<GridNonceStatus>> {
-    let marks = sequencer.get_all_grid_high_water_marks();
+pub async fn nonce_status(State(state): State<AppState>) -> Json<Vec<GridNonceStatus>> {
+    let marks = state.sequencer.get_all_grid_high_water_marks();
     let statuses: Vec<GridNonceStatus> = marks
         .into_iter()
         .map(|(grid_id, hwm)| GridNonceStatus {
@@ -140,8 +141,43 @@ pub async fn submit_reading(
     }
 }
 
-pub async fn settle_account(Json(_body): Json<SettlementRequest>) -> Json<&'static str> {
-    Json("settlement initiated")
+pub async fn settle_account(
+    State(state): State<AppState>,
+    Json(body): Json<SettlementRequest>,
+) -> Result<Json<&'static str>, StatusCode> {
+    let rpc_url =
+        std::env::var("SOROBAN_RPC_URL").unwrap_or_else(|_| "http://localhost:8000".into());
+    let finalizer = crate::settlement::finalizer::Finalizer::new(
+        state.pool.clone(),
+        rpc_url,
+        state.breaker.clone(),
+    );
+    let mint_queue = crate::settlement::mint_queue::MintQueue::new(state.pool);
+
+    // In a real scenario, we'd get readings from the database.
+    // Here we simulate a batch for the requested meter and a generic resource type (e.g. water).
+    let batch_id = format!("batch-{}", uuid::Uuid::new_v4());
+    let resource_type = "water"; // Example
+    let readings = vec![(chrono::Utc::now(), body.resource_units)];
+
+    let engine = crate::tariffs::engine::TariffEngine::new(vec![]); // Default tariff
+
+    engine
+        .evaluate_and_finalize(
+            &batch_id,
+            resource_type,
+            &readings,
+            &finalizer,
+            &mint_queue,
+            &body.destination_wallet,
+        )
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "settlement failed");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    Ok(Json("settlement completed"))
 }
 
 pub async fn get_diagnostics(
@@ -167,6 +203,24 @@ pub async fn metrics_handler() -> impl IntoResponse {
         "text/plain; version=0.0.4",
     )];
     (headers, buffer)
+}
+
+#[derive(Serialize)]
+pub struct ClockStateResponse {
+    pub offset_seconds: f64,
+    pub estimated_drift_ppm: f64,
+    pub last_ntp_rtt_ms: Option<f64>,
+    pub correction_ns: i64,
+}
+
+pub async fn clock_state() -> Json<ClockStateResponse> {
+    let state = crate::ingestion::drift_estimator::KalmanClockState::default();
+    Json(ClockStateResponse {
+        offset_seconds: state.offset_seconds,
+        estimated_drift_ppm: state.drift_ppm(),
+        last_ntp_rtt_ms: state.last_rtt_ms,
+        correction_ns: state.correction_ns(),
+    })
 }
 
 pub async fn readyz_handler() -> StatusCode {
@@ -290,19 +344,6 @@ pub async fn register_meter(
     }))
 }
 
-#[derive(Deserialize)]
-pub struct RotateKeyRequest {
-    pub meter_id: String,
-    pub new_public_key_hex: String,
-    pub old_signature_hex: String,
-}
-
-#[derive(Serialize)]
-pub struct RotateKeyResponse {
-    pub meter_id: String,
-    pub status: String,
-}
-
 pub async fn rotate_key(
     Json(body): Json<RotateKeyRequest>,
 ) -> Result<Json<RotateKeyResponse>, StatusCode> {
@@ -329,4 +370,30 @@ pub async fn rotate_key(
         meter_id: body.meter_id,
         status: "key-rotated".into(),
     }))
+}
+
+#[derive(Deserialize)]
+pub struct RotateKeyRequest {
+    pub meter_id: String,
+    pub new_public_key_hex: String,
+    pub old_signature_hex: String,
+}
+
+#[derive(Serialize)]
+pub struct RotateKeyResponse {
+    pub meter_id: String,
+    pub status: String,
+}
+
+#[derive(Serialize)]
+pub struct RateLimiterStatusResponse {
+    pub top_sources: Vec<(String, u64)>,
+}
+
+pub async fn rate_limiter_status(
+    State(limiter): State<Arc<DynamicRateLimiter>>,
+) -> Json<RateLimiterStatusResponse> {
+    Json(RateLimiterStatusResponse {
+        top_sources: limiter.get_status(),
+    })
 }

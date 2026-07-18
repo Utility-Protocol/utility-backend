@@ -1,16 +1,21 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::Mutex;
 use tracing_subscriber::EnvFilter;
 
+use utility_backend::api::middleware::DynamicRateLimiter;
 use utility_backend::api::AppState;
 use utility_backend::gateway::hlc::HybridLogicalClock;
 use utility_backend::gateway::lock::AdvisoryLock;
+use utility_backend::soroban::rpc::CircuitBreaker;
 use utility_backend::soroban::sequencer::NonceSequencer;
 use utility_backend::time_series::compression::{
     init_global_compression_manager, spawn_compression_monitor, CompressionPolicy,
     CompressionPolicyManager,
 };
+use utility_backend::transport::lib::spawn_transport_monitors;
+use utility_backend::transport::tcp::config::TcpTransportConfig;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -45,13 +50,20 @@ async fn main() -> anyhow::Result<()> {
     init_global_compression_manager(compression_manager.clone());
     spawn_compression_monitor(compression_manager, Duration::from_secs(60));
 
+    // Start the adaptive TCP connection lifecycle manager and FD monitor so
+    // long-held meter sockets cannot exhaust the process descriptor budget.
+    let _transport = spawn_transport_monitors(TcpTransportConfig::default());
+
     let advisory_lock = Arc::new(AdvisoryLock::postgres(db_pool.clone()));
-    let hlc = Arc::new(HybridLogicalClock::new());
+    let breaker = Arc::new(Mutex::new(CircuitBreaker::new(5)));
+    let rate_limiter = DynamicRateLimiter::new();
+
     let state = AppState {
         sequencer,
-        db_pool,
+        pool: db_pool,
         advisory_lock,
-        hlc,
+        breaker,
+        rate_limiter,
     };
 
     let app = utility_backend::api::router::build_router(state).await?;
@@ -61,7 +73,7 @@ async fn main() -> anyhow::Result<()> {
 
     axum::serve(
         tokio::net::TcpListener::bind(addr).await?,
-        app.into_make_service(),
+        app.into_make_service_with_connect_info::<SocketAddr>(),
     )
     .await?;
 

@@ -1,8 +1,16 @@
 pub mod api;
 pub mod blockchain;
 pub mod gateway;
+pub mod identity;
+pub mod ingestion;
+pub mod lifecycle;
+pub mod memory;
+pub mod ratelimit;
 pub mod settlement;
 pub mod soroban;
+pub mod storage;
 pub mod tariffs;
 pub mod time_series;
+pub mod tracing;
+pub mod transport;
 pub mod types;

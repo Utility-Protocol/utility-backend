@@ -1,0 +1,22 @@
+// Canonical schema for HTB grid topology (issue #48).
+//
+// NOTE: documents the wire contract. The Rust implementation in `topology.rs`
+// mirrors these definitions (`NodeDef` / `TopologyDef`) so the build does not
+// require a `protoc`/`prost` toolchain. Keep field numbers in sync if a protobuf
+// backend is introduced.
+
+syntax = "proto3";
+
+package utility.ratelimit.v1;
+
+message Node {
+  uint32 id = 1;
+  optional uint32 parent_id = 2;
+  uint64 rate_tokens_per_s = 3;
+  uint64 burst_tokens = 4;
+  uint64 ceil_tokens_per_s = 5;
+}
+
+message Topology {
+  repeated Node nodes = 1;
+}

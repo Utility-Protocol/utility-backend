@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+import "watermark.proto";
+
+package utility.gossip;
+
+message GossipMessage {
+  string node_id = 1;
+  uint64 heartbeat = 2;
+  utility.watermark.WatermarkVector watermark_delta = 3;
+}
