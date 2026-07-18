@@ -5,6 +5,7 @@ pub mod identity;
 pub mod ingestion;
 pub mod lifecycle;
 pub mod memory;
+pub mod observability;
 pub mod ratelimit;
 pub mod settlement;
 pub mod soroban;

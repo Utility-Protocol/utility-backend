@@ -6,6 +6,7 @@ use tracing_subscriber::EnvFilter;
 
 use utility_backend::api::middleware::DynamicRateLimiter;
 use utility_backend::api::AppState;
+use utility_backend::gateway::hlc::HybridLogicalClock;
 use utility_backend::gateway::lock::AdvisoryLock;
 use utility_backend::soroban::rpc::CircuitBreaker;
 use utility_backend::soroban::sequencer::NonceSequencer;

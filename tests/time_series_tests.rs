@@ -186,6 +186,7 @@ async fn test_concurrent_telemetry_ingestion_ordering() {
                 &mid,
                 100.0 + (i as f64),
                 chrono::Utc::now(),
+                0,
             )
             .await
         }));
