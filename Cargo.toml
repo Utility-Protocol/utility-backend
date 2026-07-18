@@ -24,7 +24,7 @@ opentelemetry-otlp = "0.14"
 thiserror = "1"
 anyhow = "1"
 ed25519-dalek = { version = "2", features = ["rand_core"] }
-rand = "0.8"
+rand = "0.10"
 ring = "0.17"
 hex = "0.4"
 sha2 = "0.10"
@@ -68,7 +68,7 @@ axum-test = "14"
 tempfile = "3"
 proptest = "1"
 criterion = "0.5"
-rand = "0.8"
+rand = "0.10"
 
 [features]
 default = []
