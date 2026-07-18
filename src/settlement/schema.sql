@@ -19,3 +19,18 @@ CREATE TABLE IF NOT EXISTS processed_mints (
 );
 
 CREATE INDEX IF NOT EXISTS idx_pending_mints_batch_id ON pending_mints(batch_id);
+
+CREATE TABLE IF NOT EXISTS dead_letter_queue (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    queue_name TEXT NOT NULL,
+    message_id TEXT NOT NULL,
+    payload JSONB NOT NULL,
+    error_reason TEXT,
+    retry_count INT NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'failed',
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(queue_name, message_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_dlq_status ON dead_letter_queue(status);

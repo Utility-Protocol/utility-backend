@@ -102,6 +102,25 @@ impl Finalizer {
             Err(e) => {
                 warn!(batch_id = %batch_id, error = %e, "soroban aggregated mint transaction failed");
                 tx.rollback().await?;
+
+                let dlq_payload = serde_json::json!({
+                    "batch_id": batch_id,
+                    "resource_type": resource_type,
+                    "amount": total_amount,
+                    "destination": destination,
+                    "idempotency_key": idempotency_key,
+                });
+                let msg_id_str = format!("{}:{}", batch_id, resource_type);
+                if let Err(dlq_err) = crate::settlement::dlq::send_to_dlq(
+                    &self.pool,
+                    "mint-events",
+                    &msg_id_str,
+                    &dlq_payload,
+                    Some(&e.to_string()),
+                ).await {
+                    tracing::error!(error = %dlq_err, "failed to send message to DLQ");
+                }
+
                 return Err(e.into());
             }
         }
