@@ -8,14 +8,16 @@ fn arb_leaf() -> impl Strategy<Value = Leaf> {
         any::<u8>(),
         any::<i128>(),
         any::<u64>(),
+        any::<u64>(),
     )
         .prop_map(
-            |(meter_id, timestamp_ms, commodity_type, scaled_reading, nonce)| Leaf {
+            |(meter_id, timestamp_ms, commodity_type, scaled_reading, nonce, hlc_timestamp)| Leaf {
                 meter_id,
                 timestamp_ms,
                 commodity_type,
                 scaled_reading,
                 nonce,
+                hlc_timestamp,
             },
         )
 }
@@ -61,6 +63,7 @@ fn rejects_batches_over_limit() {
             commodity_type: 0,
             scaled_reading: 1,
             nonce: 1,
+            hlc_timestamp: 0,
         };
         16_385
     ];
