@@ -82,6 +82,36 @@ lazy_static! {
         "Number of TCP frames rejected because their payload exceeded the configured maximum"
     )
     .unwrap();
+
+    pub static ref SLO_REQUESTS_TOTAL: CounterVec = register_counter_vec!(
+        "utility_slo_requests_total",
+        "Total HTTP requests counted for SLO evaluation",
+        &["route", "status_class"]
+    )
+    .unwrap();
+    pub static ref SLO_REQUEST_LATENCY_SECONDS: HistogramVec = register_histogram_vec!(
+        "utility_slo_request_latency_seconds",
+        "HTTP request latency in seconds for SLO evaluation",
+        &["route"]
+    )
+    .unwrap();
+    pub static ref SLO_AVAILABILITY_BURN_RATE: GaugeVec = register_gauge_vec!(
+        "utility_slo_availability_burn_rate",
+        "Availability error-budget burn rate by SLO window",
+        &["window"]
+    )
+    .unwrap();
+    pub static ref SLO_LATENCY_BURN_RATE: GaugeVec = register_gauge_vec!(
+        "utility_slo_latency_burn_rate",
+        "Latency error-budget burn rate by SLO window",
+        &["window"]
+    )
+    .unwrap();
+    pub static ref SLO_ALERT_ACTIVE: Gauge = register_gauge!(
+        "utility_slo_alert_active",
+        "Whether any multi-window SLO burn-rate alert is active"
+    )
+    .unwrap();
     pub static ref TCP_BUFFER_EXCEEDED_RESETS: Counter = register_counter!(
         "tcp_buffer_exceeded_resets",
         "Number of TCP connections reset because their reassembly buffer exceeded the configured maximum"
@@ -313,36 +343,35 @@ pub fn inc_pool_starvation(class: &str) {
         .inc();
 }
 
-lazy_static! {
-    pub static ref WEBHOOK_DELIVERIES: CounterVec = register_counter_vec!(
-        "utility_webhook_deliveries_total",
-        "Total webhook delivery outcomes by endpoint and status",
-        &["endpoint_id", "status"]
-    )
-    .unwrap();
-    pub static ref WEBHOOK_RETRIES: CounterVec = register_counter_vec!(
-        "utility_webhook_retries_total",
-        "Total webhook retry attempts by endpoint",
-        &["endpoint_id"]
-    )
-    .unwrap();
-    pub static ref WEBHOOK_DELIVERY_LATENCY_SECONDS: Histogram = register_histogram!(
-        "utility_webhook_delivery_latency_seconds",
-        "End-to-end webhook delivery latency in seconds"
-    )
-    .unwrap();
-}
-
-pub fn record_webhook_delivery(endpoint_id: &str, status: &str) {
-    WEBHOOK_DELIVERIES
-        .with_label_values(&[endpoint_id, status])
+pub fn record_slo_request(route: &str, status_code: u16, latency_seconds: f64) {
+    let status_class = match status_code {
+        100..=199 => "1xx",
+        200..=299 => "2xx",
+        300..=399 => "3xx",
+        400..=499 => "4xx",
+        500..=599 => "5xx",
+        _ => "unknown",
+    };
+    SLO_REQUESTS_TOTAL
+        .with_label_values(&[route, status_class])
         .inc();
+    SLO_REQUEST_LATENCY_SECONDS
+        .with_label_values(&[route])
+        .observe(latency_seconds);
 }
 
-pub fn record_webhook_retry(endpoint_id: &str) {
-    WEBHOOK_RETRIES.with_label_values(&[endpoint_id]).inc();
-}
-
-pub fn observe_webhook_latency(seconds: f64) {
-    WEBHOOK_DELIVERY_LATENCY_SECONDS.observe(seconds);
+pub fn publish_slo_status(status: &crate::observability::slo::SloStatus) {
+    SLO_AVAILABILITY_BURN_RATE
+        .with_label_values(&["fast"])
+        .set(status.fast_window.availability_burn_rate);
+    SLO_AVAILABILITY_BURN_RATE
+        .with_label_values(&["slow"])
+        .set(status.slow_window.availability_burn_rate);
+    SLO_LATENCY_BURN_RATE
+        .with_label_values(&["fast"])
+        .set(status.fast_window.latency_burn_rate);
+    SLO_LATENCY_BURN_RATE
+        .with_label_values(&["slow"])
+        .set(status.slow_window.latency_burn_rate);
+    SLO_ALERT_ACTIVE.set(if status.alert_active { 1.0 } else { 0.0 });
 }
