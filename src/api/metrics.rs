@@ -82,6 +82,36 @@ lazy_static! {
         "Number of TCP frames rejected because their payload exceeded the configured maximum"
     )
     .unwrap();
+
+    pub static ref SLO_REQUESTS_TOTAL: CounterVec = register_counter_vec!(
+        "utility_slo_requests_total",
+        "Total HTTP requests counted for SLO evaluation",
+        &["route", "status_class"]
+    )
+    .unwrap();
+    pub static ref SLO_REQUEST_LATENCY_SECONDS: HistogramVec = register_histogram_vec!(
+        "utility_slo_request_latency_seconds",
+        "HTTP request latency in seconds for SLO evaluation",
+        &["route"]
+    )
+    .unwrap();
+    pub static ref SLO_AVAILABILITY_BURN_RATE: GaugeVec = register_gauge_vec!(
+        "utility_slo_availability_burn_rate",
+        "Availability error-budget burn rate by SLO window",
+        &["window"]
+    )
+    .unwrap();
+    pub static ref SLO_LATENCY_BURN_RATE: GaugeVec = register_gauge_vec!(
+        "utility_slo_latency_burn_rate",
+        "Latency error-budget burn rate by SLO window",
+        &["window"]
+    )
+    .unwrap();
+    pub static ref SLO_ALERT_ACTIVE: Gauge = register_gauge!(
+        "utility_slo_alert_active",
+        "Whether any multi-window SLO burn-rate alert is active"
+    )
+    .unwrap();
     pub static ref TCP_BUFFER_EXCEEDED_RESETS: Counter = register_counter!(
         "tcp_buffer_exceeded_resets",
         "Number of TCP connections reset because their reassembly buffer exceeded the configured maximum"
@@ -311,4 +341,37 @@ pub fn inc_pool_starvation(class: &str) {
     POOL_CLASS_STARVATION_EVENTS
         .with_label_values(&[class])
         .inc();
+}
+
+pub fn record_slo_request(route: &str, status_code: u16, latency_seconds: f64) {
+    let status_class = match status_code {
+        100..=199 => "1xx",
+        200..=299 => "2xx",
+        300..=399 => "3xx",
+        400..=499 => "4xx",
+        500..=599 => "5xx",
+        _ => "unknown",
+    };
+    SLO_REQUESTS_TOTAL
+        .with_label_values(&[route, status_class])
+        .inc();
+    SLO_REQUEST_LATENCY_SECONDS
+        .with_label_values(&[route])
+        .observe(latency_seconds);
+}
+
+pub fn publish_slo_status(status: &crate::observability::slo::SloStatus) {
+    SLO_AVAILABILITY_BURN_RATE
+        .with_label_values(&["fast"])
+        .set(status.fast_window.availability_burn_rate);
+    SLO_AVAILABILITY_BURN_RATE
+        .with_label_values(&["slow"])
+        .set(status.slow_window.availability_burn_rate);
+    SLO_LATENCY_BURN_RATE
+        .with_label_values(&["fast"])
+        .set(status.fast_window.latency_burn_rate);
+    SLO_LATENCY_BURN_RATE
+        .with_label_values(&["slow"])
+        .set(status.slow_window.latency_burn_rate);
+    SLO_ALERT_ACTIVE.set(if status.alert_active { 1.0 } else { 0.0 });
 }
