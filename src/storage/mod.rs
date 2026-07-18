@@ -7,6 +7,7 @@
 //! * [`job_scheduler`] — lease-based distributed worker claiming.
 //! * [`timescaledb`] — workload-priority-partitioned connection pooling.
 
+pub mod backup_verification;
 pub mod checkpoint;
 pub mod durable_queue;
 pub mod job_scheduler;

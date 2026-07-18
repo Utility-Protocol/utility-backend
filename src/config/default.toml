@@ -16,3 +16,15 @@ max_attestation_time_ms = 5000
 [tracing.soroban_propagation]
 enabled = true
 poll_interval_ms = 500
+
+[service_mesh]
+enabled = true
+service_name = "utility-backend"
+trust_domain = "utility.local"
+cert_path = "/etc/utility/mesh/tls.crt"
+key_path = "/etc/utility/mesh/tls.key"
+ca_cert_path = "/etc/utility/mesh/ca.crt"
+require_spiffe_id = true
+critical_path_budget_ms = 100
+canary_min_success_rate = 0.9999
+canary_max_p99_latency_ms = 100
