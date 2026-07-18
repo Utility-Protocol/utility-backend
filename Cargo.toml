@@ -53,7 +53,7 @@ p256 = { version = "0.13", features = ["ecdsa"] }
 ecdsa = "0.16"
 x509-cert = { version = "0.2", features = ["builder"] }
 dcap-qvl = "0.5"
-tonic = "0.11"
+tonic = "0.14"
 prost = "0.12"
 prost-types = "0.12"
 ciborium = "0.2"
