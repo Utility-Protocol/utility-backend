@@ -17,8 +17,14 @@ max_attestation_time_ms = 5000
 enabled = true
 poll_interval_ms = 500
 
-[cache]
-default_ttl_ms = 60000
-max_entries = 10000
-redis_url = "redis://127.0.0.1:6379/0"
-namespace = "utility-backend"
+[service_mesh]
+enabled = true
+service_name = "utility-backend"
+trust_domain = "utility.local"
+cert_path = "/etc/utility/mesh/tls.crt"
+key_path = "/etc/utility/mesh/tls.key"
+ca_cert_path = "/etc/utility/mesh/ca.crt"
+require_spiffe_id = true
+critical_path_budget_ms = 100
+canary_min_success_rate = 0.9999
+canary_max_p99_latency_ms = 100
