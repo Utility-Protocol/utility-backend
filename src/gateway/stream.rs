@@ -14,33 +14,49 @@ use tokio::sync::mpsc;
 use tokio::sync::Notify;
 use tracing::{info, warn};
 
+use crate::gateway::hlc::{HlcTimestamp, HybridLogicalClock};
+
 pub struct MeterEvent {
     pub meter_id: String,
     pub timestamp_tai: Tai64N,
     pub correction_ns: i64,
     pub reading: f64,
     pub token_volume: u64,
+    pub hlc_timestamp: u64,
+}
+
+impl MeterEvent {
+    pub fn hlc(&self) -> HlcTimestamp {
+        HlcTimestamp(self.hlc_timestamp)
+    }
 }
 
 #[allow(dead_code)]
 pub struct BackpressureFilter {
     buffer_capacity: usize,
     tx: mpsc::Sender<MeterEvent>,
+    hlc: Arc<HybridLogicalClock>,
 }
 
 impl BackpressureFilter {
-    pub fn new(capacity: usize) -> (Self, mpsc::Receiver<MeterEvent>) {
+    pub fn new(capacity: usize, hlc: Arc<HybridLogicalClock>) -> (Self, mpsc::Receiver<MeterEvent>) {
         let (tx, rx) = mpsc::channel(capacity);
         (
             Self {
                 buffer_capacity: capacity,
                 tx,
+                hlc,
             },
             rx,
         )
     }
 
-    pub async fn push(&self, event: MeterEvent) -> Result<(), &'static str> {
+    pub async fn push(&self, mut event: MeterEvent) -> Result<(), &'static str> {
+        if event.hlc_timestamp != 0 {
+            self.hlc.update(event.hlc());
+        }
+        let hlc_ts = self.hlc.tick(event.timestamp as u64);
+        event.hlc_timestamp = hlc_ts.0;
         self.tx
             .send(event)
             .await
@@ -57,12 +73,14 @@ pub async fn ingest_stream(
         match chunk {
             Ok(data) => {
                 info!(len = data.len(), "received meter datagram");
+                let wall_clock = chrono::Utc::now().timestamp_millis();
                 let event = MeterEvent {
                     meter_id: String::from("unknown"),
                     timestamp_tai: Tai64N::now_with_correction(0),
                     correction_ns: 0,
                     reading: 0.0,
                     token_volume: 0,
+                    hlc_timestamp: 0,
                 };
                 if let Err(e) = filter.push(event).await {
                     warn!("{}", e);
