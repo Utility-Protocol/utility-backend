@@ -83,24 +83,35 @@ lazy_static! {
     )
     .unwrap();
 
-    pub static ref RESILIENCE_IN_FLIGHT: Gauge = register_gauge!(
-        "utility_resilience_in_flight_requests",
-        "Current in-flight requests tracked by the resilience admission controller"
+    pub static ref SLO_REQUESTS_TOTAL: CounterVec = register_counter_vec!(
+        "utility_slo_requests_total",
+        "Total HTTP requests counted for SLO evaluation",
+        &["route", "status_class"]
     )
     .unwrap();
-    pub static ref RESILIENCE_CAPACITY_TIER: GaugeVec = register_gauge_vec!(
-        "utility_resilience_capacity_tier",
-        "Active capacity tier as a one-hot gauge labelled by tier" ,
-        &["tier"]
+    pub static ref SLO_REQUEST_LATENCY_SECONDS: HistogramVec = register_histogram_vec!(
+        "utility_slo_request_latency_seconds",
+        "HTTP request latency in seconds for SLO evaluation",
+        &["route"]
     )
     .unwrap();
-    pub static ref RESILIENCE_SHED_REQUESTS: CounterVec = register_counter_vec!(
-        "utility_resilience_shed_requests_total",
-        "Requests rejected by feature flags or capacity shedding",
-        &["feature", "tier"]
+    pub static ref SLO_AVAILABILITY_BURN_RATE: GaugeVec = register_gauge_vec!(
+        "utility_slo_availability_burn_rate",
+        "Availability error-budget burn rate by SLO window",
+        &["window"]
     )
     .unwrap();
-
+    pub static ref SLO_LATENCY_BURN_RATE: GaugeVec = register_gauge_vec!(
+        "utility_slo_latency_burn_rate",
+        "Latency error-budget burn rate by SLO window",
+        &["window"]
+    )
+    .unwrap();
+    pub static ref SLO_ALERT_ACTIVE: Gauge = register_gauge!(
+        "utility_slo_alert_active",
+        "Whether any multi-window SLO burn-rate alert is active"
+    )
+    .unwrap();
     pub static ref TCP_BUFFER_EXCEEDED_RESETS: Counter = register_counter!(
         "tcp_buffer_exceeded_resets",
         "Number of TCP connections reset because their reassembly buffer exceeded the configured maximum"
@@ -332,43 +343,35 @@ pub fn inc_pool_starvation(class: &str) {
         .inc();
 }
 
-pub fn set_resilience_in_flight(count: f64) {
-    RESILIENCE_IN_FLIGHT.set(count);
-}
-
-pub fn set_resilience_capacity_tier(tier: crate::resilience::CapacityTier) {
-    for name in ["normal", "degraded", "shed"] {
-        RESILIENCE_CAPACITY_TIER.with_label_values(&[name]).set(0.0);
-    }
-    let active = match tier {
-        crate::resilience::CapacityTier::Normal => "normal",
-        crate::resilience::CapacityTier::Degraded => "degraded",
-        crate::resilience::CapacityTier::Shed => "shed",
+pub fn record_slo_request(route: &str, status_code: u16, latency_seconds: f64) {
+    let status_class = match status_code {
+        100..=199 => "1xx",
+        200..=299 => "2xx",
+        300..=399 => "3xx",
+        400..=499 => "4xx",
+        500..=599 => "5xx",
+        _ => "unknown",
     };
-    RESILIENCE_CAPACITY_TIER
-        .with_label_values(&[active])
-        .set(1.0);
-}
-
-pub fn inc_resilience_shed(
-    feature: Option<crate::resilience::FeatureFlag>,
-    tier: crate::resilience::CapacityTier,
-) {
-    let feature = match feature {
-        Some(crate::resilience::FeatureFlag::MeterReads) => "meter_reads",
-        Some(crate::resilience::FeatureFlag::TariffExplain) => "tariff_explain",
-        Some(crate::resilience::FeatureFlag::Settlement) => "settlement",
-        Some(crate::resilience::FeatureFlag::Diagnostics) => "diagnostics",
-        Some(crate::resilience::FeatureFlag::CompressionStatus) => "compression_status",
-        Some(crate::resilience::FeatureFlag::TelemetryTrace) => "telemetry_trace",
-        None => "unclassified",
-    };
-    let tier = match tier {
-        crate::resilience::CapacityTier::Normal => "normal",
-        crate::resilience::CapacityTier::Degraded => "degraded",
-        crate::resilience::CapacityTier::Shed => "shed",
-    };
-    RESILIENCE_SHED_REQUESTS
-        .with_label_values(&[feature, tier])
+    SLO_REQUESTS_TOTAL
+        .with_label_values(&[route, status_class])
         .inc();
+    SLO_REQUEST_LATENCY_SECONDS
+        .with_label_values(&[route])
+        .observe(latency_seconds);
+}
+
+pub fn publish_slo_status(status: &crate::observability::slo::SloStatus) {
+    SLO_AVAILABILITY_BURN_RATE
+        .with_label_values(&["fast"])
+        .set(status.fast_window.availability_burn_rate);
+    SLO_AVAILABILITY_BURN_RATE
+        .with_label_values(&["slow"])
+        .set(status.slow_window.availability_burn_rate);
+    SLO_LATENCY_BURN_RATE
+        .with_label_values(&["fast"])
+        .set(status.fast_window.latency_burn_rate);
+    SLO_LATENCY_BURN_RATE
+        .with_label_values(&["slow"])
+        .set(status.slow_window.latency_burn_rate);
+    SLO_ALERT_ACTIVE.set(if status.alert_active { 1.0 } else { 0.0 });
 }
