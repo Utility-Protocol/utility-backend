@@ -67,6 +67,38 @@ lazy_static! {
         "Chunk compaction duration in milliseconds"
     )
     .unwrap();
+
+    pub static ref KAFKA_CONSUMER_GROUP_LAG: GaugeVec = register_gauge_vec!(
+        "utility_kafka_consumer_group_lag",
+        "Total lag per Kafka consumer group and topic",
+        &["group", "topic"]
+    )
+    .unwrap();
+    pub static ref KAFKA_CONSUMER_GROUP_PARTITION_LAG: GaugeVec = register_gauge_vec!(
+        "utility_kafka_consumer_group_partition_lag",
+        "Lag per Kafka consumer group topic partition",
+        &["group", "topic", "partition"]
+    )
+    .unwrap();
+    pub static ref KAFKA_CONSUMER_GROUP_DESIRED_REPLICAS: GaugeVec = register_gauge_vec!(
+        "utility_kafka_consumer_group_desired_replicas",
+        "Desired replicas computed by the Kafka consumer group autoscaler",
+        &["group"]
+    )
+    .unwrap();
+    pub static ref KAFKA_CONSUMER_GROUP_SCALING_DECISIONS: CounterVec = register_counter_vec!(
+        "utility_kafka_consumer_group_scaling_decisions_total",
+        "Kafka consumer group autoscaling decisions",
+        &["group", "reason"]
+    )
+    .unwrap();
+    pub static ref KAFKA_CONSUMER_GROUP_LAG_ALERTS: CounterVec = register_counter_vec!(
+        "utility_kafka_consumer_group_lag_alerts_total",
+        "Kafka consumer group lag alerts emitted by severity",
+        &["group", "severity"]
+    )
+    .unwrap();
+
     pub static ref TCP_PARTIAL_FRAMES_BUFFERED: Counter = register_counter!(
         "tcp_partial_frames_buffered",
         "Number of TCP reads buffered by the frame reassembly layer"
@@ -147,6 +179,36 @@ pub fn set_db_waiting_requests(count: f64) {
 
 pub fn get_starvation_count() -> f64 {
     DB_POOL_STARVATION.get()
+}
+
+pub fn set_kafka_consumer_group_lag(group: &str, topic: &str, lag: f64) {
+    KAFKA_CONSUMER_GROUP_LAG
+        .with_label_values(&[group, topic])
+        .set(lag);
+}
+
+pub fn set_kafka_consumer_group_partition_lag(group: &str, topic: &str, partition: i32, lag: f64) {
+    KAFKA_CONSUMER_GROUP_PARTITION_LAG
+        .with_label_values(&[group, topic, &partition.to_string()])
+        .set(lag);
+}
+
+pub fn set_kafka_consumer_group_desired_replicas(group: &str, replicas: u32) {
+    KAFKA_CONSUMER_GROUP_DESIRED_REPLICAS
+        .with_label_values(&[group])
+        .set(replicas as f64);
+}
+
+pub fn record_kafka_consumer_group_scaling_decision(group: &str, reason: &str) {
+    KAFKA_CONSUMER_GROUP_SCALING_DECISIONS
+        .with_label_values(&[group, reason])
+        .inc();
+}
+
+pub fn record_kafka_consumer_group_lag_alert(group: &str, severity: &str) {
+    KAFKA_CONSUMER_GROUP_LAG_ALERTS
+        .with_label_values(&[group, severity])
+        .inc();
 }
 
 pub fn record_compaction_attempt() {
