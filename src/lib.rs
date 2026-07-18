@@ -7,6 +7,7 @@ pub mod lifecycle;
 pub mod memory;
 pub mod observability;
 pub mod ratelimit;
+pub mod resilience;
 pub mod settlement;
 pub mod soroban;
 pub mod storage;
