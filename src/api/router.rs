@@ -49,12 +49,16 @@ pub async fn build_router(state: AppState) -> anyhow::Result<Router> {
             "/api/v1/rate-limiter/status",
             get(handlers::rate_limiter_status),
         )
+        .route("/api/v1/slo/status", get(handlers::slo_status))
         .layer(axum_mw::from_fn_with_state(
             state.clone(),
             crate::api::middleware::rate_limit_layer,
         ))
         .layer(axum_mw::from_fn(
             crate::gateway::telemetry::tracing_middleware,
+        ))
+        .layer(axum_mw::from_fn(
+            crate::api::middleware::slo_monitoring_layer,
         ))
         .layer(cors)
         .with_state(state);

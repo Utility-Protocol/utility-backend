@@ -6,9 +6,13 @@ use tracing_subscriber::EnvFilter;
 
 use utility_backend::api::middleware::DynamicRateLimiter;
 use utility_backend::api::AppState;
+use utility_backend::gateway::hlc::HybridLogicalClock;
 use utility_backend::gateway::lock::AdvisoryLock;
 use utility_backend::soroban::rpc::CircuitBreaker;
 use utility_backend::soroban::sequencer::NonceSequencer;
+use utility_backend::storage::backup_verification::{
+    spawn_backup_verification, BackupVerificationConfig, BackupVerifier,
+};
 use utility_backend::time_series::compression::{
     init_global_compression_manager, spawn_compression_monitor, CompressionPolicy,
     CompressionPolicyManager,
