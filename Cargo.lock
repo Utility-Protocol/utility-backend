@@ -5284,7 +5284,7 @@ dependencies = [
  "socket2 0.5.10",
  "sqlx",
  "tempfile",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "thread_local",
  "tokio",
  "tokio-rustls 0.25.0",
