@@ -57,12 +57,35 @@ async fn main() -> anyhow::Result<()> {
     let breaker = Arc::new(Mutex::new(CircuitBreaker::new(5)));
     let rate_limiter = DynamicRateLimiter::new();
 
+    let pd_client = utility_backend::incident::PagerDutyClient::from_env();
+    let incident_manager = utility_backend::incident::IncidentManager::new(pd_client);
+
+    // Register a default automated runbook and rule for Database Lag mitigation
+    incident_manager.register_runbook(utility_backend::incident::Runbook {
+        name: "Auto-Mitigate Database Lag".to_string(),
+        description: "Shortens the compression window to alleviate disk/lag issues".to_string(),
+        actions: vec![utility_backend::incident::RunbookAction::AdjustCompressionPolicy {
+            compress_after_days: 1,
+        }],
+    });
+
+    incident_manager.register_rule(utility_backend::incident::AutomationRule {
+        id: "RULE-001".to_string(),
+        component: "TimeSeries".to_string(),
+        severity: "critical".to_string(),
+        incident_class: "DatabaseLag".to_string(),
+        runbook_name: "Auto-Mitigate Database Lag".to_string(),
+    });
+
+    utility_backend::incident::init_global_incident_manager(incident_manager.clone());
+
     let state = AppState {
         sequencer,
         pool: db_pool,
         advisory_lock,
         breaker,
         rate_limiter,
+        incident_manager,
     };
 
     let app = utility_backend::api::router::build_router(state).await?;

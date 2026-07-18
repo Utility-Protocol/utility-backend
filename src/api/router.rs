@@ -32,6 +32,14 @@ pub async fn build_router(state: AppState) -> anyhow::Result<Router> {
         .route("/api/v1/meters/rotate-key", post(handlers::rotate_key))
         .route("/api/v1/nonce/status", get(handlers::nonce_status))
         .route("/api/v1/gateway/locks", get(handlers::list_gateway_locks))
+        // Incident Response and Automated Runbooks routes
+        .route("/api/v1/incidents", post(handlers::trigger_incident_endpoint).get(handlers::list_incidents_endpoint))
+        .route("/api/v1/incidents/:id", get(handlers::get_incident_endpoint))
+        .route("/api/v1/incidents/:id/acknowledge", post(handlers::acknowledge_incident_endpoint))
+        .route("/api/v1/incidents/:id/resolve", post(handlers::resolve_incident_endpoint))
+        .route("/api/v1/runbooks", post(handlers::register_runbook_endpoint).get(handlers::list_runbooks_endpoint))
+        .route("/api/v1/runbooks/rules", post(handlers::register_rule_endpoint).get(handlers::list_rules_endpoint))
+        .route("/api/v1/runbooks/logs", get(handlers::list_runbook_logs_endpoint))
         .route("/metrics", get(handlers::metrics_handler))
         .route("/debug/clock_state", get(handlers::clock_state))
         .route(

@@ -392,3 +392,113 @@ pub async fn rate_limiter_status(
         top_sources: limiter.get_status(),
     })
 }
+
+// ---------------------------------------------------------------------------
+// Incident Response & Automated Runbook Handlers
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+pub struct TriggerIncidentRequest {
+    pub id: String,
+    pub title: String,
+    pub severity: String,
+    pub component: String,
+    pub incident_class: String,
+    pub custom_details: Option<serde_json::Value>,
+}
+
+pub async fn trigger_incident_endpoint(
+    State(state): State<AppState>,
+    Json(req): Json<TriggerIncidentRequest>,
+) -> Result<Json<&'static str>, StatusCode> {
+    match state.incident_manager.trigger_incident(
+        req.id,
+        req.title,
+        req.severity,
+        req.component,
+        req.incident_class,
+        req.custom_details,
+    ) {
+        Ok(_) => Ok(Json("incident triggering queued")),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to queue incident");
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+pub async fn list_incidents_endpoint(
+    State(state): State<AppState>,
+) -> Json<Vec<crate::incident::Incident>> {
+    Json(state.incident_manager.list_incidents())
+}
+
+pub async fn get_incident_endpoint(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<crate::incident::Incident>, StatusCode> {
+    match state.incident_manager.get_incident(&id) {
+        Some(incident) => Ok(Json(incident)),
+        None => Err(StatusCode::NOT_FOUND),
+    }
+}
+
+pub async fn acknowledge_incident_endpoint(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<&'static str>, StatusCode> {
+    match state.incident_manager.acknowledge_incident(id) {
+        Ok(_) => Ok(Json("incident acknowledge queued")),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to acknowledge incident");
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+pub async fn resolve_incident_endpoint(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<&'static str>, StatusCode> {
+    match state.incident_manager.resolve_incident(id) {
+        Ok(_) => Ok(Json("incident resolve queued")),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to resolve incident");
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+pub async fn register_runbook_endpoint(
+    State(state): State<AppState>,
+    Json(runbook): Json<crate::incident::Runbook>,
+) -> Json<&'static str> {
+    state.incident_manager.register_runbook(runbook);
+    Json("runbook registered")
+}
+
+pub async fn list_runbooks_endpoint(
+    State(state): State<AppState>,
+) -> Json<Vec<crate::incident::Runbook>> {
+    Json(state.incident_manager.list_runbooks())
+}
+
+pub async fn register_rule_endpoint(
+    State(state): State<AppState>,
+    Json(rule): Json<crate::incident::AutomationRule>,
+) -> Json<&'static str> {
+    state.incident_manager.register_rule(rule);
+    Json("automation rule registered")
+}
+
+pub async fn list_rules_endpoint(
+    State(state): State<AppState>,
+) -> Json<Vec<crate::incident::AutomationRule>> {
+    Json(state.incident_manager.list_rules())
+}
+
+pub async fn list_runbook_logs_endpoint(
+    State(state): State<AppState>,
+) -> Json<Vec<crate::incident::RunbookExecutionLog>> {
+    Json(state.incident_manager.get_execution_logs().await)
+}

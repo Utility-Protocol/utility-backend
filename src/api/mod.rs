@@ -1,5 +1,6 @@
 use crate::api::middleware::DynamicRateLimiter;
 use crate::gateway::lock::AdvisoryLock;
+use crate::incident::IncidentManager;
 use crate::soroban::rpc::CircuitBreaker;
 use crate::soroban::sequencer::NonceSequencer;
 use axum::extract::FromRef;
@@ -20,6 +21,7 @@ pub struct AppState {
     pub advisory_lock: Arc<AdvisoryLock>,
     pub breaker: Arc<Mutex<CircuitBreaker>>,
     pub rate_limiter: Arc<DynamicRateLimiter>,
+    pub incident_manager: Arc<IncidentManager>,
 }
 
 impl FromRef<AppState> for Arc<NonceSequencer> {
@@ -49,5 +51,11 @@ impl FromRef<AppState> for Arc<Mutex<CircuitBreaker>> {
 impl FromRef<AppState> for Arc<DynamicRateLimiter> {
     fn from_ref(state: &AppState) -> Self {
         state.rate_limiter.clone()
+    }
+}
+
+impl FromRef<AppState> for Arc<IncidentManager> {
+    fn from_ref(state: &AppState) -> Self {
+        state.incident_manager.clone()
     }
 }
