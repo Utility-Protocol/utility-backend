@@ -2,7 +2,6 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
-use tracing_subscriber::EnvFilter;
 
 use utility_backend::api::middleware::DynamicRateLimiter;
 use utility_backend::api::AppState;
@@ -18,9 +17,7 @@ use utility_backend::transport::tcp::config::TcpTransportConfig;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
-        .init();
+    utility_backend::tracing::logging::init_structured_logging()?;
 
     tracing::info!("starting utility-backend service");
 
