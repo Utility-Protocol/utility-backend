@@ -10,3 +10,5 @@ pub mod storage;
 pub mod tariffs_tests;
 pub mod time_series_tests;
 pub mod transport;
+
+mod kafka;
