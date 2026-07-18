@@ -472,3 +472,20 @@ mod tests {
         assert!(extended_until > initial_until);
     }
 }
+
+pub async fn slo_monitoring_layer(req: Request<Body>, next: Next) -> Response {
+    let route = req.uri().path().to_string();
+    let started = Instant::now();
+    let response = next.run(req).await;
+    let latency = started.elapsed();
+    crate::api::metrics::record_slo_request(
+        route.as_str(),
+        response.status().as_u16(),
+        latency.as_secs_f64(),
+    );
+    let status = crate::api::slo_state::global_slo_monitor()
+        .lock()
+        .record_request(response.status().as_u16(), latency, Instant::now());
+    crate::api::metrics::publish_slo_status(&status);
+    response
+}

@@ -13,6 +13,7 @@ use std::sync::Arc;
 use crate::api::metrics;
 use crate::api::middleware::DynamicRateLimiter;
 use crate::gateway::crypto::global_registry;
+use crate::gateway::hlc::HybridLogicalClock;
 use crate::gateway::lock::{ActiveLock, AdvisoryLock};
 use crate::tariffs::engine::{global_tariff_engine, TariffContext, TariffExplanation};
 use crate::time_series::analytics::{global_engine, DiagnosticReport};
@@ -121,13 +122,17 @@ pub async fn list_tariffs() -> Json<Vec<&'static str>> {
 
 pub async fn submit_reading(
     State(pool): State<Pool<Postgres>>,
+    State(hlc): State<Arc<HybridLogicalClock>>,
     Json(body): Json<ReadingSubmission>,
 ) -> Result<Json<&'static str>, StatusCode> {
     let recorded_at = chrono::DateTime::parse_from_rfc3339(&body.timestamp)
         .map(|dt| dt.with_timezone(&chrono::Utc))
         .unwrap_or_else(|_| chrono::Utc::now());
 
-    match ingest_telemetry(&pool, &body.meter_id, body.value, recorded_at).await {
+    let wall_ms = recorded_at.timestamp_millis() as u64;
+    let hlc_ts = hlc.tick(wall_ms);
+
+    match ingest_telemetry(&pool, &body.meter_id, body.value, recorded_at, hlc_ts.0).await {
         Ok(_) => Ok(Json("reading accepted")),
         Err(e) => {
             tracing::error!(error = %e, "failed to ingest reading");
@@ -187,6 +192,27 @@ pub async fn get_diagnostics(
         .ok_or(StatusCode::NOT_FOUND)
 }
 
+#[derive(Serialize)]
+pub struct CapacityForecastResponse {
+    pub forecasts: Vec<crate::capacity::CapacityForecast>,
+}
+
+pub async fn capacity_forecast() -> Json<CapacityForecastResponse> {
+    let planner =
+        crate::capacity::CapacityPlanner::new(crate::capacity::CapacityPlanningConfig::default());
+    let forecasts = planner.forecast(&crate::capacity::sample_usage_window(chrono::Utc::now()));
+    for forecast in &forecasts {
+        metrics::set_capacity_forecast(
+            &forecast.service,
+            &format!("{:?}", forecast.resource),
+            forecast.current_utilization,
+            forecast.projected_utilization,
+            forecast.days_to_critical,
+        );
+    }
+    Json(CapacityForecastResponse { forecasts })
+}
+
 pub async fn metrics_handler() -> impl IntoResponse {
     use prometheus::TextEncoder;
     let encoder = TextEncoder::new();
@@ -216,6 +242,12 @@ pub async fn clock_state() -> Json<ClockStateResponse> {
         last_ntp_rtt_ms: state.last_rtt_ms,
         correction_ns: state.correction_ns(),
     })
+}
+
+pub async fn slo_status() -> Json<crate::observability::slo::SloStatus> {
+    let status = crate::api::slo_state::global_slo_monitor().lock().status();
+    metrics::publish_slo_status(&status);
+    Json(status)
 }
 
 pub async fn readyz_handler() -> StatusCode {

@@ -32,6 +32,10 @@ pub async fn build_router(state: AppState) -> anyhow::Result<Router> {
         .route("/api/v1/meters/rotate-key", post(handlers::rotate_key))
         .route("/api/v1/nonce/status", get(handlers::nonce_status))
         .route("/api/v1/gateway/locks", get(handlers::list_gateway_locks))
+        .route(
+            "/api/v1/capacity/forecast",
+            get(handlers::capacity_forecast),
+        )
         .route("/metrics", get(handlers::metrics_handler))
         .route("/debug/clock_state", get(handlers::clock_state))
         .route(
@@ -46,12 +50,16 @@ pub async fn build_router(state: AppState) -> anyhow::Result<Router> {
             "/api/v1/rate-limiter/status",
             get(handlers::rate_limiter_status),
         )
+        .route("/api/v1/slo/status", get(handlers::slo_status))
         .layer(axum_mw::from_fn_with_state(
             state.clone(),
             crate::api::middleware::rate_limit_layer,
         ))
         .layer(axum_mw::from_fn(
             crate::gateway::telemetry::tracing_middleware,
+        ))
+        .layer(axum_mw::from_fn(
+            crate::api::middleware::slo_monitoring_layer,
         ))
         .layer(cors)
         .with_state(state);
