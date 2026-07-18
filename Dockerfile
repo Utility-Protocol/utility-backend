@@ -1,15 +1,30 @@
-FROM rust:slim AS builder
-
+FROM lukemathwalker/cargo-chef:latest-rust-1-slim AS chef
 WORKDIR /app
-RUN apt-get update && apt-get install -y pkg-config libssl-dev build-essential cmake libclang-dev && rm -rf /var/lib/apt/lists/*
 
-COPY Cargo.toml Cargo.lock ./
-RUN mkdir src && echo "fn main() {}" > src/main.rs
-RUN cargo build --release 2>/dev/null || true
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
 
+FROM chef AS builder
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    build-essential \
+    cmake \
+    libclang-dev \
+    protobuf-compiler \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=planner /app/recipe.json recipe.json
+# Build and cache third-party dependencies
+RUN cargo chef cook --release --recipe-path recipe.json
+
+# Copy full application source and compile the backend
 COPY . .
 RUN cargo build --release
 
+# Final runtime image
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y ca-certificates libssl3 && rm -rf /var/lib/apt/lists/*
 
