@@ -27,6 +27,19 @@ lazy_static! {
         &["method"]
     )
     .unwrap();
+
+    pub static ref REPLICATION_LAG_MS: GaugeVec = register_gauge_vec!(
+        "utility_replication_lag_ms",
+        "Current cross-region replication lag in milliseconds",
+        &["region"]
+    )
+    .unwrap();
+    pub static ref DR_FAILOVER_ATTEMPTS: CounterVec = register_counter_vec!(
+        "utility_dr_failover_attempts_total",
+        "Total disaster-recovery failover attempts by target region and outcome",
+        &["target_region", "outcome"]
+    )
+    .unwrap();
     pub static ref ACTIVE_CONNECTIONS: Gauge = register_gauge!(
         "utility_active_gateway_connections",
         "Number of currently active gateway connections"
@@ -192,6 +205,16 @@ pub fn record_config_reload_failure() {
 
 pub fn set_config_schema_version(version: f64) {
     CONFIG_SCHEMA_VERSION.set(version);
+}
+
+pub fn set_replication_lag_ms(region: &str, lag_ms: f64) {
+    REPLICATION_LAG_MS.with_label_values(&[region]).set(lag_ms);
+}
+
+pub fn record_dr_failover_attempt(target_region: &str, outcome: &str) {
+    DR_FAILOVER_ATTEMPTS
+        .with_label_values(&[target_region, outcome])
+        .inc();
 }
 
 pub fn record_ingestion(meter_id: &str, status: &str) {

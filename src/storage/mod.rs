@@ -12,4 +12,5 @@ pub mod checkpoint;
 pub mod durable_queue;
 pub mod job_scheduler;
 pub mod reorg_log;
+pub mod replication;
 pub mod timescaledb;
