@@ -164,6 +164,36 @@ lazy_static! {
     .unwrap();
 }
 
+lazy_static! {
+    pub static ref CONFIG_RELOAD_SUCCESS_TOTAL: Counter = register_counter!(
+        "utility_config_reload_success_total",
+        "Total successful configuration loads and hot reloads"
+    )
+    .unwrap();
+    pub static ref CONFIG_RELOAD_FAILURE_TOTAL: Counter = register_counter!(
+        "utility_config_reload_failure_total",
+        "Total failed configuration hot reload attempts"
+    )
+    .unwrap();
+    pub static ref CONFIG_SCHEMA_VERSION: Gauge = register_gauge!(
+        "utility_config_schema_version",
+        "Currently active validated configuration schema version"
+    )
+    .unwrap();
+}
+
+pub fn record_config_reload_success() {
+    CONFIG_RELOAD_SUCCESS_TOTAL.inc();
+}
+
+pub fn record_config_reload_failure() {
+    CONFIG_RELOAD_FAILURE_TOTAL.inc();
+}
+
+pub fn set_config_schema_version(version: f64) {
+    CONFIG_SCHEMA_VERSION.set(version);
+}
+
 pub fn record_ingestion(meter_id: &str, status: &str) {
     INGESTED_EVENTS.with_label_values(&[meter_id, status]).inc();
 }
