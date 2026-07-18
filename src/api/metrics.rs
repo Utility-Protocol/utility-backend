@@ -67,6 +67,38 @@ lazy_static! {
         "Chunk compaction duration in milliseconds"
     )
     .unwrap();
+
+    pub static ref KAFKA_CONSUMER_GROUP_LAG: GaugeVec = register_gauge_vec!(
+        "utility_kafka_consumer_group_lag",
+        "Total lag per Kafka consumer group and topic",
+        &["group", "topic"]
+    )
+    .unwrap();
+    pub static ref KAFKA_CONSUMER_GROUP_PARTITION_LAG: GaugeVec = register_gauge_vec!(
+        "utility_kafka_consumer_group_partition_lag",
+        "Lag per Kafka consumer group topic partition",
+        &["group", "topic", "partition"]
+    )
+    .unwrap();
+    pub static ref KAFKA_CONSUMER_GROUP_DESIRED_REPLICAS: GaugeVec = register_gauge_vec!(
+        "utility_kafka_consumer_group_desired_replicas",
+        "Desired replicas computed by the Kafka consumer group autoscaler",
+        &["group"]
+    )
+    .unwrap();
+    pub static ref KAFKA_CONSUMER_GROUP_SCALING_DECISIONS: CounterVec = register_counter_vec!(
+        "utility_kafka_consumer_group_scaling_decisions_total",
+        "Kafka consumer group autoscaling decisions",
+        &["group", "reason"]
+    )
+    .unwrap();
+    pub static ref KAFKA_CONSUMER_GROUP_LAG_ALERTS: CounterVec = register_counter_vec!(
+        "utility_kafka_consumer_group_lag_alerts_total",
+        "Kafka consumer group lag alerts emitted by severity",
+        &["group", "severity"]
+    )
+    .unwrap();
+
     pub static ref TCP_PARTIAL_FRAMES_BUFFERED: Counter = register_counter!(
         "tcp_partial_frames_buffered",
         "Number of TCP reads buffered by the frame reassembly layer"
@@ -82,11 +114,84 @@ lazy_static! {
         "Number of TCP frames rejected because their payload exceeded the configured maximum"
     )
     .unwrap();
+
+    pub static ref SLO_REQUESTS_TOTAL: CounterVec = register_counter_vec!(
+        "utility_slo_requests_total",
+        "Total HTTP requests counted for SLO evaluation",
+        &["route", "status_class"]
+    )
+    .unwrap();
+    pub static ref SLO_REQUEST_LATENCY_SECONDS: HistogramVec = register_histogram_vec!(
+        "utility_slo_request_latency_seconds",
+        "HTTP request latency in seconds for SLO evaluation",
+        &["route"]
+    )
+    .unwrap();
+    pub static ref SLO_AVAILABILITY_BURN_RATE: GaugeVec = register_gauge_vec!(
+        "utility_slo_availability_burn_rate",
+        "Availability error-budget burn rate by SLO window",
+        &["window"]
+    )
+    .unwrap();
+    pub static ref SLO_LATENCY_BURN_RATE: GaugeVec = register_gauge_vec!(
+        "utility_slo_latency_burn_rate",
+        "Latency error-budget burn rate by SLO window",
+        &["window"]
+    )
+    .unwrap();
+    pub static ref SLO_ALERT_ACTIVE: Gauge = register_gauge!(
+        "utility_slo_alert_active",
+        "Whether any multi-window SLO burn-rate alert is active"
+    )
+    .unwrap();
     pub static ref TCP_BUFFER_EXCEEDED_RESETS: Counter = register_counter!(
         "tcp_buffer_exceeded_resets",
         "Number of TCP connections reset because their reassembly buffer exceeded the configured maximum"
     )
     .unwrap();
+    pub static ref MESH_MTLS_HANDSHAKES: CounterVec = register_counter_vec!(
+        "utility_mesh_mtls_handshakes_total",
+        "Total service mesh mutual TLS handshakes by peer service and result",
+        &["service", "result"]
+    )
+    .unwrap();
+    pub static ref MESH_MTLS_HANDSHAKE_LATENCY_SECONDS: HistogramVec = register_histogram_vec!(
+        "utility_mesh_mtls_handshake_latency_seconds",
+        "Service mesh mutual TLS handshake latency in seconds",
+        &["service"],
+        vec![0.001, 0.005, 0.01, 0.025, 0.05, 0.075, 0.1]
+    )
+    .unwrap();
+}
+
+lazy_static! {
+    pub static ref CONFIG_RELOAD_SUCCESS_TOTAL: Counter = register_counter!(
+        "utility_config_reload_success_total",
+        "Total successful configuration loads and hot reloads"
+    )
+    .unwrap();
+    pub static ref CONFIG_RELOAD_FAILURE_TOTAL: Counter = register_counter!(
+        "utility_config_reload_failure_total",
+        "Total failed configuration hot reload attempts"
+    )
+    .unwrap();
+    pub static ref CONFIG_SCHEMA_VERSION: Gauge = register_gauge!(
+        "utility_config_schema_version",
+        "Currently active validated configuration schema version"
+    )
+    .unwrap();
+}
+
+pub fn record_config_reload_success() {
+    CONFIG_RELOAD_SUCCESS_TOTAL.inc();
+}
+
+pub fn record_config_reload_failure() {
+    CONFIG_RELOAD_FAILURE_TOTAL.inc();
+}
+
+pub fn set_config_schema_version(version: f64) {
+    CONFIG_SCHEMA_VERSION.set(version);
 }
 
 pub fn record_ingestion(meter_id: &str, status: &str) {
@@ -119,9 +224,52 @@ pub fn get_starvation_count() -> f64 {
     DB_POOL_STARVATION.get()
 }
 
+pub fn set_kafka_consumer_group_lag(group: &str, topic: &str, lag: f64) {
+    KAFKA_CONSUMER_GROUP_LAG
+        .with_label_values(&[group, topic])
+        .set(lag);
+}
+
+pub fn set_kafka_consumer_group_partition_lag(group: &str, topic: &str, partition: i32, lag: f64) {
+    KAFKA_CONSUMER_GROUP_PARTITION_LAG
+        .with_label_values(&[group, topic, &partition.to_string()])
+        .set(lag);
+}
+
+pub fn set_kafka_consumer_group_desired_replicas(group: &str, replicas: u32) {
+    KAFKA_CONSUMER_GROUP_DESIRED_REPLICAS
+        .with_label_values(&[group])
+        .set(replicas as f64);
+}
+
+pub fn record_kafka_consumer_group_scaling_decision(group: &str, reason: &str) {
+    KAFKA_CONSUMER_GROUP_SCALING_DECISIONS
+        .with_label_values(&[group, reason])
+        .inc();
+}
+
+pub fn record_kafka_consumer_group_lag_alert(group: &str, severity: &str) {
+    KAFKA_CONSUMER_GROUP_LAG_ALERTS
+        .with_label_values(&[group, severity])
+        .inc();
+}
+
 pub fn record_compaction_attempt() {
     COMPACTION_ATTEMPTS.inc();
 }
+
+pub fn record_mesh_mtls_handshake(service: &str, result: &str) {
+    MESH_MTLS_HANDSHAKES
+        .with_label_values(&[service, result])
+        .inc();
+}
+
+pub fn record_mesh_mtls_handshake_latency(service: &str, latency_seconds: f64) {
+    MESH_MTLS_HANDSHAKE_LATENCY_SECONDS
+        .with_label_values(&[service])
+        .observe(latency_seconds);
+}
+
 pub fn record_tcp_partial_frame_buffered() {
     TCP_PARTIAL_FRAMES_BUFFERED.inc();
 }
@@ -313,41 +461,35 @@ pub fn inc_pool_starvation(class: &str) {
         .inc();
 }
 
-lazy_static! {
-    pub static ref CAPACITY_CURRENT_UTILIZATION: GaugeVec = register_gauge_vec!(
-        "utility_capacity_current_utilization_ratio",
-        "Latest observed utilization ratio by service and resource for capacity planning",
-        &["service", "resource"]
-    )
-    .unwrap();
-    pub static ref CAPACITY_PROJECTED_UTILIZATION: GaugeVec = register_gauge_vec!(
-        "utility_capacity_projected_utilization_ratio",
-        "Projected utilization ratio by service and resource over the planning horizon",
-        &["service", "resource"]
-    )
-    .unwrap();
-    pub static ref CAPACITY_DAYS_TO_CRITICAL: GaugeVec = register_gauge_vec!(
-        "utility_capacity_days_to_critical",
-        "Forecasted days until a service resource reaches critical utilization; -1 means not trending toward critical",
-        &["service", "resource"]
-    )
-    .unwrap();
+pub fn record_slo_request(route: &str, status_code: u16, latency_seconds: f64) {
+    let status_class = match status_code {
+        100..=199 => "1xx",
+        200..=299 => "2xx",
+        300..=399 => "3xx",
+        400..=499 => "4xx",
+        500..=599 => "5xx",
+        _ => "unknown",
+    };
+    SLO_REQUESTS_TOTAL
+        .with_label_values(&[route, status_class])
+        .inc();
+    SLO_REQUEST_LATENCY_SECONDS
+        .with_label_values(&[route])
+        .observe(latency_seconds);
 }
 
-pub fn set_capacity_forecast(
-    service: &str,
-    resource: &str,
-    current: f64,
-    projected: f64,
-    days_to_critical: Option<f64>,
-) {
-    CAPACITY_CURRENT_UTILIZATION
-        .with_label_values(&[service, resource])
-        .set(current);
-    CAPACITY_PROJECTED_UTILIZATION
-        .with_label_values(&[service, resource])
-        .set(projected);
-    CAPACITY_DAYS_TO_CRITICAL
-        .with_label_values(&[service, resource])
-        .set(days_to_critical.unwrap_or(-1.0));
+pub fn publish_slo_status(status: &crate::observability::slo::SloStatus) {
+    SLO_AVAILABILITY_BURN_RATE
+        .with_label_values(&["fast"])
+        .set(status.fast_window.availability_burn_rate);
+    SLO_AVAILABILITY_BURN_RATE
+        .with_label_values(&["slow"])
+        .set(status.slow_window.availability_burn_rate);
+    SLO_LATENCY_BURN_RATE
+        .with_label_values(&["fast"])
+        .set(status.fast_window.latency_burn_rate);
+    SLO_LATENCY_BURN_RATE
+        .with_label_values(&["slow"])
+        .set(status.slow_window.latency_burn_rate);
+    SLO_ALERT_ACTIVE.set(if status.alert_active { 1.0 } else { 0.0 });
 }
