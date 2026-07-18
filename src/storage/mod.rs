@@ -4,11 +4,12 @@
 //! * [`durable_queue`] — disk-backed spillover queue for the cross-shard
 //!   credit-flow protocol.
 //! * [`reorg_log`] — settled-batch state log for Soroban reorg rollback/replay.
-//! * [`migrations`] — versioned database migrations with checksum validation and rollback planning.
+//! * [`job_scheduler`] — lease-based distributed worker claiming.
 //! * [`timescaledb`] — workload-priority-partitioned connection pooling.
 
+pub mod backup_verification;
 pub mod checkpoint;
 pub mod durable_queue;
-pub mod migrations;
+pub mod job_scheduler;
 pub mod reorg_log;
 pub mod timescaledb;
