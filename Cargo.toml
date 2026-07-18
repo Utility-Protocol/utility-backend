@@ -23,7 +23,7 @@ opentelemetry_sdk = { version = "0.21", features = ["rt-tokio"] }
 opentelemetry-otlp = "0.14"
 thiserror = "1"
 anyhow = "1"
-ed25519-dalek = { version = "2", features = ["rand_core"] }
+ed25519-dalek = { version = "3", features = ["rand_core"] }
 rand = "0.8"
 ring = "0.17"
 hex = "0.4"
