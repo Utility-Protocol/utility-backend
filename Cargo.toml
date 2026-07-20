@@ -44,7 +44,7 @@ fixed = { version = "1.23", features = ["serde"] }
 async-trait = "0.1"
 backoff = { version = "0.4", features = ["tokio"] }
 tokio-stream = "0.1"
-lru = "0.12"
+lru = "0.18"
 socket2 = { version = "0.5", features = ["all"] }
 libc = "0.2"
 thread_local = "1"
