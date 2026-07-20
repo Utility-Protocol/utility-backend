@@ -33,7 +33,7 @@ futures = "0.3"
 parking_lot = "0.12"
 dashmap = "5"
 deadpool-postgres = { version = "0.14", default-features = false, features = ["rt_tokio_1"] }
-prometheus = { version = "0.13", features = ["process"] }
+prometheus = { version = "0.14", features = ["process"] }
 lazy_static = "1"
 reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
 rustls = { version = "0.23", features = ["ring", "tls12"] }
