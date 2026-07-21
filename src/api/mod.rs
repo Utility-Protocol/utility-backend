@@ -1,4 +1,4 @@
-use crate::api::middleware::DynamicRateLimiter;
+use crate::api::middleware::{DynamicRateLimiter, TenantRateLimiter};
 use crate::gateway::lock::AdvisoryLock;
 use crate::soroban::rpc::CircuitBreaker;
 use crate::soroban::sequencer::NonceSequencer;
@@ -21,6 +21,7 @@ pub struct AppState {
     pub advisory_lock: Arc<AdvisoryLock>,
     pub breaker: Arc<Mutex<CircuitBreaker>>,
     pub rate_limiter: Arc<DynamicRateLimiter>,
+    pub tenant_rate_limiter: Arc<TenantRateLimiter>,
 }
 
 impl FromRef<AppState> for Arc<NonceSequencer> {
@@ -50,5 +51,11 @@ impl FromRef<AppState> for Arc<Mutex<CircuitBreaker>> {
 impl FromRef<AppState> for Arc<DynamicRateLimiter> {
     fn from_ref(state: &AppState) -> Self {
         state.rate_limiter.clone()
+    }
+}
+
+impl FromRef<AppState> for Arc<TenantRateLimiter> {
+    fn from_ref(state: &AppState) -> Self {
+        state.tenant_rate_limiter.clone()
     }
 }
