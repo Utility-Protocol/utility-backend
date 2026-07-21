@@ -20,6 +20,10 @@ use crate::time_series::analytics::{global_engine, DiagnosticReport};
 use crate::time_series::compression::CompressionStatus;
 use crate::time_series::drift::CalibrationResult;
 use crate::time_series::ingestion::ingest_telemetry;
+use crate::webhooks::dead_letter::{DeadLetterEntry, PostgresDlq};
+use crate::webhooks::dispatcher::WebhookDeliveryService;
+use crate::webhooks::{ReqwestWebhookTransport, RetryPolicy, WebhookEndpoint, WebhookEvent};
+use uuid::Uuid;
 
 #[derive(Serialize)]
 pub struct MeterInfo {
@@ -440,4 +444,249 @@ pub async fn tenant_rate_limiter_status(
             .map(|(id, limit, rej)| (id, limit.max_tokens, limit.refill_rate, rej))
             .collect(),
     })
+}
+
+// ---------------------------------------------------------------------------
+// Webhook management handlers
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+pub struct WebhookEndpointResponse {
+    pub id: String,
+    pub url: String,
+    pub tenant_id: String,
+    pub created_at: String,
+}
+
+#[derive(Deserialize)]
+pub struct CreateWebhookEndpointRequest {
+    pub id: String,
+    pub url: String,
+    pub secret: String,
+    pub tenant_id: String,
+}
+
+pub async fn list_webhook_endpoints(
+    State(pool): State<Pool<Postgres>>,
+) -> Result<Json<Vec<WebhookEndpointResponse>>, StatusCode> {
+    let rows = sqlx::query_as::<_, (String, String, String, chrono::DateTime<chrono::Utc>)>(
+        "SELECT id, url, tenant_id, created_at FROM webhook_endpoints ORDER BY created_at DESC",
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| {
+        tracing::error!(error = %e, "failed to list webhook endpoints");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    Ok(Json(
+        rows.into_iter()
+            .map(|(id, url, tenant_id, created_at)| WebhookEndpointResponse {
+                id,
+                url,
+                tenant_id,
+                created_at: created_at.to_rfc3339(),
+            })
+            .collect(),
+    ))
+}
+
+pub async fn create_webhook_endpoint(
+    State(pool): State<Pool<Postgres>>,
+    Json(body): Json<CreateWebhookEndpointRequest>,
+) -> Result<(StatusCode, Json<WebhookEndpointResponse>), StatusCode> {
+    let now = chrono::Utc::now();
+    sqlx::query(
+        "INSERT INTO webhook_endpoints (id, url, secret, tenant_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)",
+    )
+    .bind(&body.id)
+    .bind(&body.url)
+    .bind(&body.secret)
+    .bind(&body.tenant_id)
+    .bind(now)
+    .bind(now)
+    .execute(&pool)
+    .await
+    .map_err(|e| {
+        tracing::error!(error = %e, "failed to create webhook endpoint");
+        if e.to_string().contains("duplicate key") {
+            StatusCode::CONFLICT
+        } else {
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    })?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(WebhookEndpointResponse {
+            id: body.id,
+            url: body.url,
+            tenant_id: body.tenant_id,
+            created_at: now.to_rfc3339(),
+        }),
+    ))
+}
+
+pub async fn delete_webhook_endpoint(
+    State(pool): State<Pool<Postgres>>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, StatusCode> {
+    let result = sqlx::query("DELETE FROM webhook_endpoints WHERE id = $1")
+        .bind(&id)
+        .execute(&pool)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "failed to delete webhook endpoint");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    if result.rows_affected() == 0 {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Serialize)]
+pub struct TestWebhookResponse {
+    pub status: u16,
+    pub attempts: u32,
+}
+
+pub async fn test_webhook_endpoint(
+    State(pool): State<Pool<Postgres>>,
+    Path(id): Path<String>,
+) -> Result<Json<TestWebhookResponse>, StatusCode> {
+    // Look up the endpoint
+    let row = sqlx::query_as::<_, (String, String, String)>(
+        "SELECT url, secret, tenant_id FROM webhook_endpoints WHERE id = $1",
+    )
+    .bind(&id)
+    .fetch_optional(&pool)
+    .await
+    .map_err(|e| {
+        tracing::error!(error = %e, "failed to look up webhook endpoint");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?
+    .ok_or(StatusCode::NOT_FOUND)?;
+
+    let endpoint = WebhookEndpoint {
+        id: id.clone(),
+        url: row.0,
+        secret: row.1,
+        tenant_id: row.2,
+    };
+
+    let event = WebhookEvent {
+        id: Uuid::new_v4(),
+        event_type: "webhook.test".into(),
+        created_at: chrono::Utc::now(),
+        payload: serde_json::json!({
+            "test": true,
+            "message": "This is a test event from utility-backend"
+        }),
+    };
+
+    let transport = Arc::new(ReqwestWebhookTransport::default());
+    let dlq = Arc::new(PostgresDlq::new(pool.clone()));
+    let service = WebhookDeliveryService::with_dlq(transport, RetryPolicy::default(), dlq);
+
+    match service.deliver(&endpoint, &event).await {
+        Ok(receipt) => Ok(Json(TestWebhookResponse {
+            status: receipt.status,
+            attempts: receipt.attempts,
+        })),
+        Err(_) => Ok(Json(TestWebhookResponse {
+            status: 0,
+            attempts: 5,
+        })),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct DeadLetterQuery {
+    pub endpoint_id: Option<String>,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
+
+pub async fn list_dead_letters(
+    State(pool): State<Pool<Postgres>>,
+    Query(query): Query<DeadLetterQuery>,
+) -> Result<Json<Vec<DeadLetterEntry>>, StatusCode> {
+    let dlq = PostgresDlq::new(pool);
+    dlq.list(
+        query.endpoint_id.as_deref(),
+        query.limit.unwrap_or(50),
+        query.offset.unwrap_or(0),
+    )
+    .await
+    .map(Json)
+    .map_err(|e| {
+        tracing::error!(error = %e, "failed to list dead letters");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })
+}
+
+#[derive(Serialize)]
+pub struct RetryDeadLetterResponse {
+    pub id: Uuid,
+    pub status: u16,
+    pub attempts: u32,
+}
+
+pub async fn retry_dead_letter(
+    State(pool): State<Pool<Postgres>>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<RetryDeadLetterResponse>, StatusCode> {
+    let dlq = PostgresDlq::new(pool.clone());
+    let entry = dlq.get(id).await.map_err(|e| {
+        tracing::error!(error = %e, "failed to get dead letter");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?.ok_or(StatusCode::NOT_FOUND)?;
+
+    // Look up the endpoint
+    let row = sqlx::query_as::<_, (String, String)>(
+        "SELECT url, secret FROM webhook_endpoints WHERE id = $1",
+    )
+    .bind(&entry.endpoint_id)
+    .fetch_optional(&pool)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .ok_or(StatusCode::NOT_FOUND)?;
+
+    let endpoint = WebhookEndpoint {
+        id: entry.endpoint_id.clone(),
+        url: row.0,
+        secret: row.1,
+        tenant_id: String::new(),
+    };
+
+    let event = WebhookEvent {
+        id: entry.event_id,
+        event_type: entry.event_type.clone(),
+        created_at: entry.failed_at,
+        payload: entry.payload.clone(),
+    };
+
+    // Remove the original DLQ entry before attempting retry to avoid
+    // duplicates: if the retry fails, the service's DLQ will create a
+    // fresh entry.
+    let _ = dlq.remove(id).await;
+
+    let transport = Arc::new(ReqwestWebhookTransport::default());
+    let retry_dlq = Arc::new(PostgresDlq::new(pool.clone()));
+    let service = WebhookDeliveryService::with_dlq(transport, RetryPolicy::default(), retry_dlq);
+
+    match service.deliver(&endpoint, &event).await {
+        Ok(receipt) => Ok(Json(RetryDeadLetterResponse {
+            id,
+            status: receipt.status,
+            attempts: receipt.attempts,
+        })),
+        Err(_) => Ok(Json(RetryDeadLetterResponse {
+            id,
+            status: 0,
+            attempts: 5,
+        })),
+    }
 }

@@ -484,6 +484,40 @@ pub fn inc_pool_starvation(class: &str) {
         .inc();
 }
 
+lazy_static! {
+    pub static ref WEBHOOK_DELIVERIES: CounterVec = register_counter_vec!(
+        "utility_webhook_deliveries_total",
+        "Total webhook delivery attempts by endpoint and outcome",
+        &["endpoint_id", "outcome"]
+    )
+    .unwrap();
+    pub static ref WEBHOOK_LATENCY_SECONDS: Histogram = register_histogram!(
+        "utility_webhook_delivery_latency_seconds",
+        "Webhook delivery latency in seconds"
+    )
+    .unwrap();
+    pub static ref WEBHOOK_RETRIES: CounterVec = register_counter_vec!(
+        "utility_webhook_retries_total",
+        "Total webhook retry attempts by endpoint",
+        &["endpoint_id"]
+    )
+    .unwrap();
+}
+
+pub fn record_webhook_delivery(endpoint_id: &str, outcome: &str) {
+    WEBHOOK_DELIVERIES
+        .with_label_values(&[endpoint_id, outcome])
+        .inc();
+}
+
+pub fn observe_webhook_latency(latency_seconds: f64) {
+    WEBHOOK_LATENCY_SECONDS.observe(latency_seconds);
+}
+
+pub fn record_webhook_retry(endpoint_id: &str) {
+    WEBHOOK_RETRIES.with_label_values(&[endpoint_id]).inc();
+}
+
 pub fn record_slo_request(route: &str, status_code: u16, latency_seconds: f64) {
     let status_class = match status_code {
         100..=199 => "1xx",
