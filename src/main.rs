@@ -4,7 +4,7 @@ use std::time::Duration;
 use tokio::sync::Mutex;
 use tracing_subscriber::EnvFilter;
 
-use utility_backend::api::middleware::DynamicRateLimiter;
+use utility_backend::api::middleware::{DynamicRateLimiter, TenantRateLimiter};
 use utility_backend::api::AppState;
 use utility_backend::gateway::hlc::HybridLogicalClock;
 use utility_backend::gateway::lock::AdvisoryLock;
@@ -69,6 +69,7 @@ async fn main() -> anyhow::Result<()> {
     let advisory_lock = Arc::new(AdvisoryLock::postgres(db_pool.clone()));
     let breaker = Arc::new(Mutex::new(CircuitBreaker::new(5)));
     let rate_limiter = DynamicRateLimiter::new();
+    let tenant_rate_limiter = TenantRateLimiter::new(1000, 1000);
 
     let state = AppState {
         sequencer,
@@ -76,6 +77,7 @@ async fn main() -> anyhow::Result<()> {
         advisory_lock,
         breaker,
         rate_limiter,
+        tenant_rate_limiter,
     };
 
     let app = utility_backend::api::router::build_router(state).await?;

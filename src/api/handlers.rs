@@ -11,7 +11,7 @@ use sqlx::{Pool, Postgres};
 use std::sync::Arc;
 
 use crate::api::metrics;
-use crate::api::middleware::DynamicRateLimiter;
+use crate::api::middleware::{DynamicRateLimiter, TenantRateLimiter};
 use crate::gateway::crypto::global_registry;
 use crate::gateway::hlc::HybridLogicalClock;
 use crate::gateway::lock::{ActiveLock, AdvisoryLock};
@@ -422,5 +422,22 @@ pub async fn rate_limiter_status(
 ) -> Json<RateLimiterStatusResponse> {
     Json(RateLimiterStatusResponse {
         top_sources: limiter.get_status(),
+    })
+}
+
+#[derive(Serialize)]
+pub struct TenantRateLimiterStatusResponse {
+    pub tenants: Vec<(String, u64, u64, u64)>,
+}
+
+pub async fn tenant_rate_limiter_status(
+    State(limiter): State<Arc<TenantRateLimiter>>,
+) -> Json<TenantRateLimiterStatusResponse> {
+    let full = limiter.get_full_status();
+    Json(TenantRateLimiterStatusResponse {
+        tenants: full
+            .into_iter()
+            .map(|(id, limit, rej)| (id, limit.max_tokens, limit.refill_rate, rej))
+            .collect(),
     })
 }
