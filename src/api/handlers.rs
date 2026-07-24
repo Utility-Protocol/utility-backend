@@ -124,11 +124,13 @@ pub async fn list_tariffs() -> Json<Vec<&'static str>> {
     ])
 }
 
+#[tracing::instrument(skip(pool), fields(db.system = "postgresql"))]
 pub async fn submit_reading(
     State(pool): State<Pool<Postgres>>,
     State(hlc): State<Arc<HybridLogicalClock>>,
     Json(body): Json<ReadingSubmission>,
 ) -> Result<Json<&'static str>, StatusCode> {
+    tracing::Span::current().record("meter.id", &body.meter_id);
     let recorded_at = chrono::DateTime::parse_from_rfc3339(&body.timestamp)
         .map(|dt| dt.with_timezone(&chrono::Utc))
         .unwrap_or_else(|_| chrono::Utc::now());
@@ -149,6 +151,13 @@ pub async fn settle_account(
     State(state): State<AppState>,
     Json(body): Json<SettlementRequest>,
 ) -> Result<Json<&'static str>, StatusCode> {
+    let span = tracing::info_span!(
+        "settlement.execute",
+        meter.id = %body.meter_id,
+        resource.units = body.resource_units,
+        otel.kind = "internal"
+    );
+    let _guard = span.enter();
     let rpc_url =
         std::env::var("SOROBAN_RPC_URL").unwrap_or_else(|_| "http://localhost:8000".into());
     let finalizer = crate::settlement::finalizer::Finalizer::new(
@@ -184,6 +193,7 @@ pub async fn settle_account(
     Ok(Json("settlement completed"))
 }
 
+#[tracing::instrument(skip_all, fields(meter.id = %meter_id, otel.kind = "internal"))]
 pub async fn get_diagnostics(
     Path(meter_id): Path<String>,
 ) -> Result<Json<DiagnosticReport>, StatusCode> {
@@ -313,6 +323,7 @@ pub async fn compression_status() -> Result<Json<CompressionStatus>, StatusCode>
     }
 }
 
+#[tracing::instrument(skip_all, fields(meter.id = %meter_id, otel.kind = "internal"))]
 pub async fn calibrate_meter(
     Path(meter_id): Path<String>,
 ) -> Result<Json<CalibrationResult>, StatusCode> {
@@ -327,6 +338,13 @@ pub async fn calibrate_meter(
 pub async fn register_meter(
     Json(body): Json<RegisterMeterRequest>,
 ) -> Result<Json<RegisterMeterResponse>, StatusCode> {
+    let span = tracing::info_span!(
+        "meter.register",
+        meter.id = %body.meter_id,
+        tpm_attestation = body.tpm_attestation_hex.is_some(),
+        otel.kind = "internal"
+    );
+    let _guard = span.enter();
     let public_key_bytes =
         hex::decode(&body.public_key_hex).map_err(|_| StatusCode::BAD_REQUEST)?;
     let public_key_arr: [u8; 32] = public_key_bytes

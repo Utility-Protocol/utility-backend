@@ -20,7 +20,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-opentelemetry = "0.22"
 opentelemetry = "0.32"
 opentelemetry_sdk = { version = "0.21", features = ["rt-tokio"] }
-opentelemetry-otlp = "0.14"
+opentelemetry-otlp = { version = "0.14", features = ["tonic", "grpc-tonic"] }
 thiserror = "2"
 anyhow = "1"
 ed25519-dalek = { version = "2", features = ["rand_core"] }
