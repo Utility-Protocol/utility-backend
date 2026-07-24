@@ -8,6 +8,7 @@ use utility_backend::api::middleware::{DynamicRateLimiter, TenantRateLimiter};
 use utility_backend::api::AppState;
 use utility_backend::gateway::hlc::HybridLogicalClock;
 use utility_backend::gateway::lock::AdvisoryLock;
+use utility_backend::gateway::telemetry::{init_open_telemetry, init_tracing_otel_bridge};
 use utility_backend::soroban::rpc::CircuitBreaker;
 use utility_backend::soroban::sequencer::NonceSequencer;
 use utility_backend::storage::backup_verification::{
@@ -22,9 +23,29 @@ use utility_backend::transport::tcp::config::TcpTransportConfig;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
-        .init();
+    // ── OpenTelemetry tracing ──────────────────────────────────────
+    // 1. Initialise the OTLP exporter and global tracer provider first.
+    let otel_ok = init_open_telemetry("utility-backend").is_ok();
+    if !otel_ok {
+        tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
+            .init();
+        tracing::warn!("OpenTelemetry OTLP exporter init failed; using plain subscriber");
+    } else {
+        // 2. Wire the tracing-opentelemetry bridge layer onto the global
+        //    subscriber so that tracing spans are exported as OTel spans.
+        if let Err(e) = init_tracing_otel_bridge() {
+            tracing_subscriber::fmt()
+                .with_env_filter(
+                    EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
+                )
+                .init();
+            tracing::warn!(
+                "OpenTelemetry bridge init failed, using plain subscriber: {}",
+                e
+            );
+        }
+    }
 
     tracing::info!("starting utility-backend service");
 

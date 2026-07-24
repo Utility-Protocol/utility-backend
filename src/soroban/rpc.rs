@@ -101,6 +101,7 @@ impl CircuitBreaker {
         self.record_sample(duration, true);
     }
 
+    #[tracing::instrument(skip(self), fields(otel.kind = "client", rpc.system = "soroban"))]
     pub async fn call_rpc(
         &mut self,
         rpc_url: &str,

@@ -1,4 +1,6 @@
+pub mod db_tracing;
 pub mod exporters;
+pub mod kafka_propagator;
 pub mod soroban_propagator;
 
 use opentelemetry::trace::TraceContextExt;
