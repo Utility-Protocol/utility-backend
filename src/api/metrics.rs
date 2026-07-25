@@ -485,29 +485,50 @@ pub fn inc_pool_starvation(class: &str) {
 }
 
 lazy_static! {
-    pub static ref DLQ_MESSAGES_COUNT: GaugeVec = register_gauge_vec!(
-        "utility_dlq_messages_count",
-        "Current number of failed messages in the Dead Letter Queue",
-        &["queue_name", "status"]
+    pub static ref WEBHOOK_DELIVERIES: CounterVec = register_counter_vec!(
+        "utility_webhook_deliveries_total",
+        "Total webhook delivery attempts by endpoint and outcome",
+        &["endpoint_id", "outcome"]
     )
     .unwrap();
-    pub static ref DLQ_RETRIES_TOTAL: CounterVec = register_counter_vec!(
-        "utility_dlq_retries_total",
-        "Total number of DLQ message retry attempts",
-        &["queue_name", "result"]
+    pub static ref WEBHOOK_LATENCY_SECONDS: Histogram = register_histogram!(
+        "utility_webhook_delivery_latency_seconds",
+        "Webhook delivery latency in seconds"
+    )
+    .unwrap();
+    pub static ref WEBHOOK_RETRIES: CounterVec = register_counter_vec!(
+        "utility_webhook_retries_total",
+        "Total webhook retry attempts by endpoint",
+        &["endpoint_id"]
     )
     .unwrap();
 }
 
-pub fn set_dlq_messages_count(queue_name: &str, status: &str, count: f64) {
-    DLQ_MESSAGES_COUNT
-        .with_label_values(&[queue_name, status])
-        .set(count);
+pub fn record_webhook_delivery(endpoint_id: &str, outcome: &str) {
+    WEBHOOK_DELIVERIES
+        .with_label_values(&[endpoint_id, outcome])
+        .inc();
 }
 
-pub fn record_dlq_retry(queue_name: &str, result: &str) {
-    DLQ_RETRIES_TOTAL
-        .with_label_values(&[queue_name, result])
+pub fn observe_webhook_latency(latency_seconds: f64) {
+    WEBHOOK_LATENCY_SECONDS.observe(latency_seconds);
+}
+
+pub fn record_webhook_retry(endpoint_id: &str) {
+    WEBHOOK_RETRIES.with_label_values(&[endpoint_id]).inc();
+}
+
+pub fn record_slo_request(route: &str, status_code: u16, latency_seconds: f64) {
+    let status_class = match status_code {
+        100..=199 => "1xx",
+        200..=299 => "2xx",
+        300..=399 => "3xx",
+        400..=499 => "4xx",
+        500..=599 => "5xx",
+        _ => "unknown",
+    };
+    SLO_REQUESTS_TOTAL
+        .with_label_values(&[route, status_class])
         .inc();
 }
 

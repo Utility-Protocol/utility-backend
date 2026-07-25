@@ -11,7 +11,7 @@ use sqlx::{Pool, Postgres};
 use std::sync::Arc;
 
 use crate::api::metrics;
-use crate::api::middleware::DynamicRateLimiter;
+use crate::api::middleware::{DynamicRateLimiter, TenantRateLimiter};
 use crate::gateway::crypto::global_registry;
 use crate::gateway::hlc::HybridLogicalClock;
 use crate::gateway::lock::{ActiveLock, AdvisoryLock};
@@ -20,6 +20,10 @@ use crate::time_series::analytics::{global_engine, DiagnosticReport};
 use crate::time_series::compression::CompressionStatus;
 use crate::time_series::drift::CalibrationResult;
 use crate::time_series::ingestion::ingest_telemetry;
+use crate::webhooks::dead_letter::{DeadLetterEntry, PostgresDlq};
+use crate::webhooks::dispatcher::WebhookDeliveryService;
+use crate::webhooks::{ReqwestWebhookTransport, RetryPolicy, WebhookEndpoint, WebhookEvent};
+use uuid::Uuid;
 
 #[derive(Serialize)]
 pub struct MeterInfo {
@@ -120,11 +124,13 @@ pub async fn list_tariffs() -> Json<Vec<&'static str>> {
     ])
 }
 
+#[tracing::instrument(skip(pool), fields(db.system = "postgresql"))]
 pub async fn submit_reading(
     State(pool): State<Pool<Postgres>>,
     State(hlc): State<Arc<HybridLogicalClock>>,
     Json(body): Json<ReadingSubmission>,
 ) -> Result<Json<&'static str>, StatusCode> {
+    tracing::Span::current().record("meter.id", &body.meter_id);
     let recorded_at = chrono::DateTime::parse_from_rfc3339(&body.timestamp)
         .map(|dt| dt.with_timezone(&chrono::Utc))
         .unwrap_or_else(|_| chrono::Utc::now());
@@ -145,6 +151,13 @@ pub async fn settle_account(
     State(state): State<AppState>,
     Json(body): Json<SettlementRequest>,
 ) -> Result<Json<&'static str>, StatusCode> {
+    let span = tracing::info_span!(
+        "settlement.execute",
+        meter.id = %body.meter_id,
+        resource.units = body.resource_units,
+        otel.kind = "internal"
+    );
+    let _guard = span.enter();
     let rpc_url =
         std::env::var("SOROBAN_RPC_URL").unwrap_or_else(|_| "http://localhost:8000".into());
     let finalizer = crate::settlement::finalizer::Finalizer::new(
@@ -180,6 +193,7 @@ pub async fn settle_account(
     Ok(Json("settlement completed"))
 }
 
+#[tracing::instrument(skip_all, fields(meter.id = %meter_id, otel.kind = "internal"))]
 pub async fn get_diagnostics(
     Path(meter_id): Path<String>,
 ) -> Result<Json<DiagnosticReport>, StatusCode> {
@@ -309,6 +323,7 @@ pub async fn compression_status() -> Result<Json<CompressionStatus>, StatusCode>
     }
 }
 
+#[tracing::instrument(skip_all, fields(meter.id = %meter_id, otel.kind = "internal"))]
 pub async fn calibrate_meter(
     Path(meter_id): Path<String>,
 ) -> Result<Json<CalibrationResult>, StatusCode> {
@@ -323,6 +338,13 @@ pub async fn calibrate_meter(
 pub async fn register_meter(
     Json(body): Json<RegisterMeterRequest>,
 ) -> Result<Json<RegisterMeterResponse>, StatusCode> {
+    let span = tracing::info_span!(
+        "meter.register",
+        meter.id = %body.meter_id,
+        tpm_attestation = body.tpm_attestation_hex.is_some(),
+        otel.kind = "internal"
+    );
+    let _guard = span.enter();
     let public_key_bytes =
         hex::decode(&body.public_key_hex).map_err(|_| StatusCode::BAD_REQUEST)?;
     let public_key_arr: [u8; 32] = public_key_bytes
@@ -425,97 +447,264 @@ pub async fn rate_limiter_status(
     })
 }
 
+#[derive(Serialize)]
+pub struct TenantRateLimiterStatusResponse {
+    pub tenants: Vec<(String, u64, u64, u64)>,
+}
+
+pub async fn tenant_rate_limiter_status(
+    State(limiter): State<Arc<TenantRateLimiter>>,
+) -> Json<TenantRateLimiterStatusResponse> {
+    let full = limiter.get_full_status();
+    Json(TenantRateLimiterStatusResponse {
+        tenants: full
+            .into_iter()
+            .map(|(id, limit, rej)| (id, limit.max_tokens, limit.refill_rate, rej))
+            .collect(),
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Webhook management handlers
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+pub struct WebhookEndpointResponse {
+    pub id: String,
+    pub url: String,
+    pub tenant_id: String,
+    pub created_at: String,
+}
+
 #[derive(Deserialize)]
-pub struct DlqListQuery {
-    pub status: Option<String>,
+pub struct CreateWebhookEndpointRequest {
+    pub id: String,
+    pub url: String,
+    pub secret: String,
+    pub tenant_id: String,
+}
+
+pub async fn list_webhook_endpoints(
+    State(pool): State<Pool<Postgres>>,
+) -> Result<Json<Vec<WebhookEndpointResponse>>, StatusCode> {
+    let rows = sqlx::query_as::<_, (String, String, String, chrono::DateTime<chrono::Utc>)>(
+        "SELECT id, url, tenant_id, created_at FROM webhook_endpoints ORDER BY created_at DESC",
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| {
+        tracing::error!(error = %e, "failed to list webhook endpoints");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    Ok(Json(
+        rows.into_iter()
+            .map(|(id, url, tenant_id, created_at)| WebhookEndpointResponse {
+                id,
+                url,
+                tenant_id,
+                created_at: created_at.to_rfc3339(),
+            })
+            .collect(),
+    ))
+}
+
+pub async fn create_webhook_endpoint(
+    State(pool): State<Pool<Postgres>>,
+    Json(body): Json<CreateWebhookEndpointRequest>,
+) -> Result<(StatusCode, Json<WebhookEndpointResponse>), StatusCode> {
+    let now = chrono::Utc::now();
+    sqlx::query(
+        "INSERT INTO webhook_endpoints (id, url, secret, tenant_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)",
+    )
+    .bind(&body.id)
+    .bind(&body.url)
+    .bind(&body.secret)
+    .bind(&body.tenant_id)
+    .bind(now)
+    .bind(now)
+    .execute(&pool)
+    .await
+    .map_err(|e| {
+        tracing::error!(error = %e, "failed to create webhook endpoint");
+        if e.to_string().contains("duplicate key") {
+            StatusCode::CONFLICT
+        } else {
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    })?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(WebhookEndpointResponse {
+            id: body.id,
+            url: body.url,
+            tenant_id: body.tenant_id,
+            created_at: now.to_rfc3339(),
+        }),
+    ))
+}
+
+pub async fn delete_webhook_endpoint(
+    State(pool): State<Pool<Postgres>>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, StatusCode> {
+    let result = sqlx::query("DELETE FROM webhook_endpoints WHERE id = $1")
+        .bind(&id)
+        .execute(&pool)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "failed to delete webhook endpoint");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    if result.rows_affected() == 0 {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Serialize)]
+pub struct TestWebhookResponse {
+    pub status: u16,
+    pub attempts: u32,
+}
+
+pub async fn test_webhook_endpoint(
+    State(pool): State<Pool<Postgres>>,
+    Path(id): Path<String>,
+) -> Result<Json<TestWebhookResponse>, StatusCode> {
+    // Look up the endpoint
+    let row = sqlx::query_as::<_, (String, String, String)>(
+        "SELECT url, secret, tenant_id FROM webhook_endpoints WHERE id = $1",
+    )
+    .bind(&id)
+    .fetch_optional(&pool)
+    .await
+    .map_err(|e| {
+        tracing::error!(error = %e, "failed to look up webhook endpoint");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?
+    .ok_or(StatusCode::NOT_FOUND)?;
+
+    let endpoint = WebhookEndpoint {
+        id: id.clone(),
+        url: row.0,
+        secret: row.1,
+        tenant_id: row.2,
+    };
+
+    let event = WebhookEvent {
+        id: Uuid::new_v4(),
+        event_type: "webhook.test".into(),
+        created_at: chrono::Utc::now(),
+        payload: serde_json::json!({
+            "test": true,
+            "message": "This is a test event from utility-backend"
+        }),
+    };
+
+    let transport = Arc::new(ReqwestWebhookTransport::default());
+    let dlq = Arc::new(PostgresDlq::new(pool.clone()));
+    let service = WebhookDeliveryService::with_dlq(transport, RetryPolicy::default(), dlq);
+
+    match service.deliver(&endpoint, &event).await {
+        Ok(receipt) => Ok(Json(TestWebhookResponse {
+            status: receipt.status,
+            attempts: receipt.attempts,
+        })),
+        Err(_) => Ok(Json(TestWebhookResponse {
+            status: 0,
+            attempts: 5,
+        })),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct DeadLetterQuery {
+    pub endpoint_id: Option<String>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
 }
 
-pub async fn list_dlq(
+pub async fn list_dead_letters(
     State(pool): State<Pool<Postgres>>,
-    Query(query): Query<DlqListQuery>,
-) -> Result<Json<Vec<crate::settlement::dlq::DlqMessage>>, StatusCode> {
-    let limit = query.limit.unwrap_or(50);
-    let offset = query.offset.unwrap_or(0);
-    match crate::settlement::dlq::list_dlq(&pool, query.status.as_deref(), limit, offset).await {
-        Ok(msgs) => Ok(Json(msgs)),
-        Err(e) => {
-            tracing::error!(error = %e, "failed to list DLQ");
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
-        }
-    }
+    Query(query): Query<DeadLetterQuery>,
+) -> Result<Json<Vec<DeadLetterEntry>>, StatusCode> {
+    let dlq = PostgresDlq::new(pool);
+    dlq.list(
+        query.endpoint_id.as_deref(),
+        query.limit.unwrap_or(50),
+        query.offset.unwrap_or(0),
+    )
+    .await
+    .map(Json)
+    .map_err(|e| {
+        tracing::error!(error = %e, "failed to list dead letters");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })
 }
 
-pub async fn get_dlq(
-    State(pool): State<Pool<Postgres>>,
-    Path(id): Path<uuid::Uuid>,
-) -> Result<Json<crate::settlement::dlq::DlqMessage>, StatusCode> {
-    match crate::settlement::dlq::get_dlq_by_id(&pool, id).await {
-        Ok(Some(msg)) => Ok(Json(msg)),
-        Ok(None) => Err(StatusCode::NOT_FOUND),
-        Err(e) => {
-            tracing::error!(error = %e, "failed to get DLQ message");
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
-        }
-    }
+#[derive(Serialize)]
+pub struct RetryDeadLetterResponse {
+    pub id: Uuid,
+    pub status: u16,
+    pub attempts: u32,
 }
 
-pub async fn delete_dlq(
+pub async fn retry_dead_letter(
     State(pool): State<Pool<Postgres>>,
-    Path(id): Path<uuid::Uuid>,
-) -> Result<StatusCode, StatusCode> {
-    match crate::settlement::dlq::delete_dlq_message(&pool, id).await {
-        Ok(true) => Ok(StatusCode::NO_CONTENT),
-        Ok(false) => Err(StatusCode::NOT_FOUND),
-        Err(e) => {
-            tracing::error!(error = %e, "failed to delete DLQ message");
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
-        }
-    }
-}
+    Path(id): Path<Uuid>,
+) -> Result<Json<RetryDeadLetterResponse>, StatusCode> {
+    let dlq = PostgresDlq::new(pool.clone());
+    let entry = dlq.get(id).await.map_err(|e| {
+        tracing::error!(error = %e, "failed to get dead letter");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?.ok_or(StatusCode::NOT_FOUND)?;
 
-pub async fn retry_dlq(
-    State(state): State<AppState>,
-    Path(id): Path<uuid::Uuid>,
-) -> Result<Json<&'static str>, StatusCode> {
-    let msg = match crate::settlement::dlq::get_dlq_by_id(&state.pool, id).await {
-        Ok(Some(m)) => m,
-        Ok(None) => return Err(StatusCode::NOT_FOUND),
-        Err(e) => {
-            tracing::error!(error = %e, "failed to get DLQ message");
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
-        }
+    // Look up the endpoint
+    let row = sqlx::query_as::<_, (String, String)>(
+        "SELECT url, secret FROM webhook_endpoints WHERE id = $1",
+    )
+    .bind(&entry.endpoint_id)
+    .fetch_optional(&pool)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .ok_or(StatusCode::NOT_FOUND)?;
+
+    let endpoint = WebhookEndpoint {
+        id: entry.endpoint_id.clone(),
+        url: row.0,
+        secret: row.1,
+        tenant_id: String::new(),
     };
 
-    let batch_id = msg.payload.get("batch_id").and_then(|v| v.as_str());
-    let resource_type = msg.payload.get("resource_type").and_then(|v| v.as_str());
-
-    let (batch_id, resource_type) = match (batch_id, resource_type) {
-        (Some(b), Some(r)) => (b, r),
-        _ => return Err(StatusCode::BAD_REQUEST),
+    let event = WebhookEvent {
+        id: entry.event_id,
+        event_type: entry.event_type.clone(),
+        created_at: entry.failed_at,
+        payload: entry.payload.clone(),
     };
 
-    let rpc_url = std::env::var("SOROBAN_RPC_URL").unwrap_or_else(|_| "http://localhost:8000".into());
-    let finalizer = crate::settlement::finalizer::Finalizer::new(
-        state.pool.clone(),
-        rpc_url,
-        state.breaker.clone(),
-    );
+    // Remove the original DLQ entry before attempting retry to avoid
+    // duplicates: if the retry fails, the service's DLQ will create a
+    // fresh entry.
+    let _ = dlq.remove(id).await;
 
-    let _ = crate::settlement::dlq::update_dlq_status(&state.pool, id, "retrying").await;
+    let transport = Arc::new(ReqwestWebhookTransport::default());
+    let retry_dlq = Arc::new(PostgresDlq::new(pool.clone()));
+    let service = WebhookDeliveryService::with_dlq(transport, RetryPolicy::default(), retry_dlq);
 
-    match finalizer.finalize_mint(batch_id, resource_type).await {
-        Ok(_) => {
-            let _ = crate::settlement::dlq::delete_dlq_message(&state.pool, id).await;
-            crate::api::metrics::record_dlq_retry(&msg.queue_name, "success");
-            Ok(Json("retry successful, message resolved"))
-        }
-        Err(e) => {
-            let _ = crate::settlement::dlq::increment_retry_count(&state.pool, id, Some(&e.to_string())).await;
-            crate::api::metrics::record_dlq_retry(&msg.queue_name, "failure");
-            tracing::error!(error = %e, batch_id = %batch_id, "DLQ manual retry failed");
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
-        }
+    match service.deliver(&endpoint, &event).await {
+        Ok(receipt) => Ok(Json(RetryDeadLetterResponse {
+            id,
+            status: receipt.status,
+            attempts: receipt.attempts,
+        })),
+        Err(_) => Ok(Json(RetryDeadLetterResponse {
+            id,
+            status: 0,
+            attempts: 5,
+        })),
     }
 }

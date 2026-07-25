@@ -1,6 +1,6 @@
 use axum::{
     middleware as axum_mw,
-    routing::{get, post},
+    routing::{delete, get, post},
     Router,
 };
 use tower_http::cors::CorsLayer;
@@ -50,6 +50,35 @@ pub async fn build_router(state: AppState) -> anyhow::Result<Router> {
             get(handlers::rate_limiter_status),
         )
         .route("/api/v1/slo/status", get(handlers::slo_status))
+        .route(
+            "/api/v1/tenant-rate-limiter/status",
+            get(handlers::tenant_rate_limiter_status),
+        )
+        .route(
+            "/api/v1/webhooks/endpoints",
+            get(handlers::list_webhook_endpoints)
+                .post(handlers::create_webhook_endpoint),
+        )
+        .route(
+            "/api/v1/webhooks/endpoints/:id",
+            delete(handlers::delete_webhook_endpoint),
+        )
+        .route(
+            "/api/v1/webhooks/endpoints/:id/test",
+            post(handlers::test_webhook_endpoint),
+        )
+        .route(
+            "/api/v1/webhooks/dead-letter",
+            get(handlers::list_dead_letters),
+        )
+        .route(
+            "/api/v1/webhooks/dead-letter/:id/retry",
+            post(handlers::retry_dead_letter),
+        )
+        .layer(axum_mw::from_fn_with_state(
+            state.clone(),
+            crate::api::middleware::tenant_rate_limit_layer,
+        ))
         .layer(axum_mw::from_fn_with_state(
             state.clone(),
             crate::api::middleware::rate_limit_layer,

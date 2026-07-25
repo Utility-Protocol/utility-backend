@@ -471,6 +471,295 @@ mod tests {
             .unwrap();
         assert!(extended_until > initial_until);
     }
+
+    // ---------- TenantRateLimiter tests ----------
+
+    #[test]
+    fn test_tenant_limit_default() {
+        let limiter = TenantRateLimiter::new(100, 100);
+        let limit = limiter.tenant_limit("grid-east");
+        assert_eq!(limit.max_tokens, 100);
+        assert_eq!(limit.refill_rate, 100);
+    }
+
+    #[test]
+    fn test_tenant_limit_override() {
+        let limiter = TenantRateLimiter::new(100, 100);
+        limiter.set_tenant_limit("premium", TenantLimit::new(500, 500));
+        let limit = limiter.tenant_limit("premium");
+        assert_eq!(limit.max_tokens, 500);
+        assert_eq!(limit.refill_rate, 500);
+        // Non-overridden still gets default
+        let def = limiter.tenant_limit("basic");
+        assert_eq!(def.max_tokens, 100);
+    }
+
+    #[test]
+    fn test_tenant_override_removal() {
+        let limiter = TenantRateLimiter::new(100, 100);
+        limiter.set_tenant_limit("temp", TenantLimit::new(999, 999));
+        assert_eq!(limiter.tenant_limit("temp").max_tokens, 999);
+        limiter.remove_tenant_override("temp");
+        assert_eq!(limiter.tenant_limit("temp").max_tokens, 100);
+    }
+
+    #[test]
+    fn test_tenant_token_bucket_consume() {
+        let limiter = TenantRateLimiter::new(5, 0); // no refill
+        for _ in 0..5 {
+            assert!(limiter.try_consume("grid-north", 1));
+        }
+        assert!(!limiter.try_consume("grid-north", 1));
+    }
+
+    #[test]
+    fn test_tenant_separate_buckets() {
+        let limiter = TenantRateLimiter::new(3, 0);
+        // Exhaust tenant-a
+        for _ in 0..3 {
+            assert!(limiter.try_consume("tenant-a", 1));
+        }
+        assert!(!limiter.try_consume("tenant-a", 1));
+        // tenant-b should still have tokens
+        assert!(limiter.try_consume("tenant-b", 1));
+        assert!(limiter.try_consume("tenant-b", 1));
+    }
+
+    #[test]
+    fn test_tenant_rejection_counting() {
+        let limiter = TenantRateLimiter::new(1, 0);
+        assert!(limiter.try_consume("abuser", 1));
+        assert!(!limiter.try_consume("abuser", 1));
+        assert!(!limiter.try_consume("abuser", 1));
+
+        let status = limiter.get_status();
+        let (name, count) = status.iter().find(|(n, _)| n == "abuser").unwrap();
+        assert_eq!(*count, 2);
+    }
+
+    #[test]
+    fn test_tenant_limit_reconfig_resets_bucket() {
+        let limiter = TenantRateLimiter::new(5, 0);
+        // Exhaust
+        for _ in 0..5 {
+            assert!(limiter.try_consume("upgrade", 1));
+        }
+        assert!(!limiter.try_consume("upgrade", 1));
+        // Give more capacity
+        limiter.set_tenant_limit("upgrade", TenantLimit::new(10, 0));
+        // Bucket is reset with new max
+        for _ in 0..10 {
+            assert!(limiter.try_consume("upgrade", 1));
+        }
+        assert!(!limiter.try_consume("upgrade", 1));
+    }
+
+    #[test]
+    fn test_tenant_get_full_status() {
+        let limiter = TenantRateLimiter::new(100, 100);
+        limiter.set_tenant_limit("vip", TenantLimit::new(1000, 1000));
+        limiter.try_consume("vip", 1);
+        limiter.try_consume("basic", 1);
+
+        let status = limiter.get_full_status();
+        assert!(status.iter().any(|(id, _, _)| id == "vip"));
+        assert!(status.iter().any(|(id, _, _)| id == "basic"));
+        let vip = status.iter().find(|(id, _, _)| id == "vip").unwrap();
+        assert_eq!(vip.1.max_tokens, 1000);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Per-Tenant Token Bucket Rate Limiter (Issue #115)
+// ---------------------------------------------------------------------------
+
+/// Configuration for a single tenant's rate limit.
+#[derive(Clone, Copy, Debug)]
+pub struct TenantLimit {
+    pub max_tokens: u64,
+    pub refill_rate: u64, // tokens per second
+}
+
+impl TenantLimit {
+    pub const fn new(max_tokens: u64, refill_rate: u64) -> Self {
+        Self {
+            max_tokens,
+            refill_rate,
+        }
+    }
+}
+
+/// Per-tenant rate limiter using independent token buckets.
+///
+/// Each tenant identified by a header (`X-Tenant-ID`) gets its own
+/// [`TokenBucket`].  Limits can be configured per tenant; tenants without an
+/// explicit override use the default limit.  Inactive tenants are pruned
+/// periodically.
+pub struct TenantRateLimiter {
+    default_limit: TenantLimit,
+    overrides: DashMap<String, TenantLimit>,
+    buckets: DashMap<String, Arc<TokenBucket>>,
+    last_accessed: DashMap<String, Instant>,
+    rejection_counts: DashMap<String, u64>,
+}
+
+impl TenantRateLimiter {
+    /// Create a new limiter with the given default limits.
+    pub fn new(default_max_tokens: u64, default_refill_rate: u64) -> Arc<Self> {
+        let limiter = Arc::new(Self {
+            default_limit: TenantLimit::new(default_max_tokens, default_refill_rate),
+            overrides: DashMap::new(),
+            buckets: DashMap::new(),
+            last_accessed: DashMap::new(),
+            rejection_counts: DashMap::new(),
+        });
+
+        let cleaner = Arc::clone(&limiter);
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(120));
+            loop {
+                interval.tick().await;
+                cleaner.prune_inactive_tenants();
+            }
+        });
+
+        limiter
+    }
+
+    /// Set a per-tenant override limit.
+    pub fn set_tenant_limit(&self, tenant_id: &str, limit: TenantLimit) {
+        self.overrides.insert(tenant_id.to_string(), limit);
+        // Reset the bucket so the new limit takes effect immediately.
+        self.buckets
+            .insert(tenant_id.to_string(), Arc::new(TokenBucket::new(limit.max_tokens, limit.refill_rate)));
+    }
+
+    /// Remove a tenant override, reverting to the default limit.
+    pub fn remove_tenant_override(&self, tenant_id: &str) {
+        self.overrides.remove(tenant_id);
+        // Reset the bucket to pick up the default.
+        self.buckets.remove(tenant_id);
+    }
+
+    /// Get the effective limit for a tenant.
+    pub fn tenant_limit(&self, tenant_id: &str) -> TenantLimit {
+        self.overrides
+            .get(tenant_id)
+            .map(|e| *e.value())
+            .unwrap_or(self.default_limit)
+    }
+
+    /// Attempt to consume `tokens` for `tenant_id`.  Returns `true` if allowed.
+    pub fn try_consume(&self, tenant_id: &str, tokens: u64) -> bool {
+        let now = Instant::now();
+        self.last_accessed.insert(tenant_id.to_string(), now);
+
+        let bucket = {
+            let existing = self.buckets.get(tenant_id).map(|e| e.value().clone());
+            if let Some(b) = existing {
+                let limit = self.tenant_limit(tenant_id);
+                // Recreate if the configured limit changed.
+                if b.max_tokens == limit.max_tokens && b.refill_rate == limit.refill_rate {
+                    b
+                } else {
+                    let new_b = Arc::new(TokenBucket::new(limit.max_tokens, limit.refill_rate));
+                    self.buckets.insert(tenant_id.to_string(), new_b.clone());
+                    new_b
+                }
+            } else {
+                let limit = self.tenant_limit(tenant_id);
+                let new_b = Arc::new(TokenBucket::new(limit.max_tokens, limit.refill_rate));
+                self.buckets.insert(tenant_id.to_string(), new_b.clone());
+                new_b
+            }
+        };
+
+        if bucket.try_consume(tokens) {
+            true
+        } else {
+            let mut entry = self
+                .rejection_counts
+                .entry(tenant_id.to_string())
+                .or_insert(0);
+            *entry += 1;
+            false
+        }
+    }
+
+    /// Return the top-N rejected tenants.
+    pub fn get_status(&self) -> Vec<(String, u64)> {
+        let mut counts: Vec<_> = self
+            .rejection_counts
+            .iter()
+            .map(|r| (r.key().clone(), *r.value()))
+            .collect();
+        counts.sort_by_key(|b| std::cmp::Reverse(b.1));
+        counts.truncate(10);
+        counts
+    }
+
+    /// Full snapshot: tenant → (limit, rejections).
+    pub fn get_full_status(&self) -> Vec<(String, TenantLimit, u64)> {
+        // Gather all known tenant ids.
+        let mut ids: Vec<String> = self.buckets.iter().map(|e| e.key().clone()).collect();
+        for entry in self.rejection_counts.iter() {
+            if !ids.contains(entry.key()) {
+                ids.push(entry.key().clone());
+            }
+        }
+        ids.sort();
+        ids.into_iter()
+            .map(|id| {
+                let limit = self.tenant_limit(&id);
+                let rej = self.rejection_counts.get(&id).map(|r| *r).unwrap_or(0);
+                (id, limit, rej)
+            })
+            .collect()
+    }
+
+    fn prune_inactive_tenants(&self) {
+        let now = Instant::now();
+        let timeout = Duration::from_secs(600);
+        let mut to_remove = Vec::new();
+        for entry in self.last_accessed.iter() {
+            if now.duration_since(*entry.value()) > timeout {
+                to_remove.push(entry.key().clone());
+            }
+        }
+        for key in to_remove {
+            self.last_accessed.remove(&key);
+            self.buckets.remove(&key);
+            self.rejection_counts.remove(&key);
+            // Keep overrides — they are operator-configured.
+        }
+    }
+}
+
+/// Axum middleware that enforces per-tenant rate limits.
+///
+/// The tenant is identified via the `X-Tenant-ID` request header.  If the
+/// header is absent the request is attributed to the special tenant
+/// `_anonymous`.  When a tenant exceeds its token bucket the request is
+/// rejected with HTTP 429.
+pub async fn tenant_rate_limit_layer(
+    State(limiter): State<Arc<TenantRateLimiter>>,
+    req: Request<Body>,
+    next: Next,
+) -> Response {
+    let tenant_id = req
+        .headers()
+        .get("x-tenant-id")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("_anonymous");
+
+    if !limiter.try_consume(tenant_id, 1) {
+        warn!(tenant = %tenant_id, "tenant rate limit exceeded");
+        return Response::builder()
+            .status(StatusCode::TOO_MANY_REQUESTS)
+            .body(Body::from("tenant rate limit exceeded"))
+            .unwrap();
+    }
+    next.run(req).await
 }
 
 pub async fn slo_monitoring_layer(req: Request<Body>, next: Next) -> Response {
