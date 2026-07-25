@@ -1,5 +1,6 @@
 use crate::api::middleware::{DynamicRateLimiter, TenantRateLimiter};
 use crate::gateway::lock::AdvisoryLock;
+use crate::incident::IncidentManager;
 use crate::soroban::rpc::CircuitBreaker;
 use crate::soroban::sequencer::NonceSequencer;
 use axum::extract::FromRef;

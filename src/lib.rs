@@ -4,6 +4,7 @@ pub mod blockchain;
 pub mod cache;
 pub mod gateway;
 pub mod identity;
+pub mod incident;
 pub mod ingestion;
 pub mod kafka;
 pub mod lifecycle;
