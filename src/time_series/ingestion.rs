@@ -15,6 +15,7 @@ pub async fn ingest_telemetry(
     meter_id: &str,
     reading: f64,
     recorded_at: DateTime<Utc>,
+    hlc_timestamp: u64,
 ) -> anyhow::Result<i32> {
     let chunk_id = telemetry_chunk_id(recorded_at);
     let lock_timeout = Duration::from_millis(100);
@@ -78,6 +79,7 @@ pub async fn ingest_telemetry(
         meter_id = %meter_id,
         sequence = next_seq,
         reading = reading,
+        hlc_timestamp = hlc_timestamp,
         "telemetry ingested successfully"
     );
 

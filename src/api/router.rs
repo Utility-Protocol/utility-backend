@@ -1,6 +1,6 @@
 use axum::{
     middleware as axum_mw,
-    routing::{get, post},
+    routing::{delete, get, post},
     Router,
 };
 use tower_http::cors::CorsLayer;
@@ -32,6 +32,9 @@ pub async fn build_router(state: AppState) -> anyhow::Result<Router> {
         .route("/api/v1/meters/rotate-key", post(handlers::rotate_key))
         .route("/api/v1/nonce/status", get(handlers::nonce_status))
         .route("/api/v1/gateway/locks", get(handlers::list_gateway_locks))
+        .route("/api/v1/dlq", get(handlers::list_dlq))
+        .route("/api/v1/dlq/:id", get(handlers::get_dlq).delete(handlers::delete_dlq))
+        .route("/api/v1/dlq/:id/retry", post(handlers::retry_dlq))
         .route("/metrics", get(handlers::metrics_handler))
         .route("/debug/clock_state", get(handlers::clock_state))
         .route(
@@ -46,12 +49,45 @@ pub async fn build_router(state: AppState) -> anyhow::Result<Router> {
             "/api/v1/rate-limiter/status",
             get(handlers::rate_limiter_status),
         )
+        .route("/api/v1/slo/status", get(handlers::slo_status))
+        .route(
+            "/api/v1/tenant-rate-limiter/status",
+            get(handlers::tenant_rate_limiter_status),
+        )
+        .route(
+            "/api/v1/webhooks/endpoints",
+            get(handlers::list_webhook_endpoints)
+                .post(handlers::create_webhook_endpoint),
+        )
+        .route(
+            "/api/v1/webhooks/endpoints/:id",
+            delete(handlers::delete_webhook_endpoint),
+        )
+        .route(
+            "/api/v1/webhooks/endpoints/:id/test",
+            post(handlers::test_webhook_endpoint),
+        )
+        .route(
+            "/api/v1/webhooks/dead-letter",
+            get(handlers::list_dead_letters),
+        )
+        .route(
+            "/api/v1/webhooks/dead-letter/:id/retry",
+            post(handlers::retry_dead_letter),
+        )
+        .layer(axum_mw::from_fn_with_state(
+            state.clone(),
+            crate::api::middleware::tenant_rate_limit_layer,
+        ))
         .layer(axum_mw::from_fn_with_state(
             state.clone(),
             crate::api::middleware::rate_limit_layer,
         ))
         .layer(axum_mw::from_fn(
             crate::gateway::telemetry::tracing_middleware,
+        ))
+        .layer(axum_mw::from_fn(
+            crate::api::middleware::slo_monitoring_layer,
         ))
         .layer(cors)
         .with_state(state);

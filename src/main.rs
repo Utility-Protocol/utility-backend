@@ -3,11 +3,16 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
 
-use utility_backend::api::middleware::DynamicRateLimiter;
+use utility_backend::api::middleware::{DynamicRateLimiter, TenantRateLimiter};
 use utility_backend::api::AppState;
+use utility_backend::gateway::hlc::HybridLogicalClock;
 use utility_backend::gateway::lock::AdvisoryLock;
+use utility_backend::gateway::telemetry::{init_open_telemetry, init_tracing_otel_bridge};
 use utility_backend::soroban::rpc::CircuitBreaker;
 use utility_backend::soroban::sequencer::NonceSequencer;
+use utility_backend::storage::backup_verification::{
+    spawn_backup_verification, BackupVerificationConfig, BackupVerifier,
+};
 use utility_backend::time_series::compression::{
     init_global_compression_manager, spawn_compression_monitor, CompressionPolicy,
     CompressionPolicyManager,
@@ -17,7 +22,29 @@ use utility_backend::transport::tcp::config::TcpTransportConfig;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    utility_backend::tracing::logging::init_structured_logging()?;
+    // ── OpenTelemetry tracing ──────────────────────────────────────
+    // 1. Initialise the OTLP exporter and global tracer provider first.
+    let otel_ok = init_open_telemetry("utility-backend").is_ok();
+    if !otel_ok {
+        tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
+            .init();
+        tracing::warn!("OpenTelemetry OTLP exporter init failed; using plain subscriber");
+    } else {
+        // 2. Wire the tracing-opentelemetry bridge layer onto the global
+        //    subscriber so that tracing spans are exported as OTel spans.
+        if let Err(e) = init_tracing_otel_bridge() {
+            tracing_subscriber::fmt()
+                .with_env_filter(
+                    EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
+                )
+                .init();
+            tracing::warn!(
+                "OpenTelemetry bridge init failed, using plain subscriber: {}",
+                e
+            );
+        }
+    }
 
     tracing::info!("starting utility-backend service");
 
@@ -37,6 +64,10 @@ async fn main() -> anyhow::Result<()> {
         db_active_connection_poller(metrics_pool).await;
     });
 
+    // Spawn Dead Letter Queue metrics poller
+    let dlq_pool = db_pool.clone();
+    utility_backend::api::metrics::spawn_dlq_metrics_poller(dlq_pool, Duration::from_secs(10));
+
     // Initialise the global compression policy manager and spawn its
     // background monitoring task.
     let compression_manager = Arc::new(CompressionPolicyManager::new(
@@ -53,6 +84,29 @@ async fn main() -> anyhow::Result<()> {
     let advisory_lock = Arc::new(AdvisoryLock::postgres(db_pool.clone()));
     let breaker = Arc::new(Mutex::new(CircuitBreaker::new(5)));
     let rate_limiter = DynamicRateLimiter::new();
+    let tenant_rate_limiter = TenantRateLimiter::new(1000, 1000);
+
+    let pd_client = utility_backend::incident::PagerDutyClient::from_env();
+    let incident_manager = utility_backend::incident::IncidentManager::new(pd_client);
+
+    // Register a default automated runbook and rule for Database Lag mitigation
+    incident_manager.register_runbook(utility_backend::incident::Runbook {
+        name: "Auto-Mitigate Database Lag".to_string(),
+        description: "Shortens the compression window to alleviate disk/lag issues".to_string(),
+        actions: vec![utility_backend::incident::RunbookAction::AdjustCompressionPolicy {
+            compress_after_days: 1,
+        }],
+    });
+
+    incident_manager.register_rule(utility_backend::incident::AutomationRule {
+        id: "RULE-001".to_string(),
+        component: "TimeSeries".to_string(),
+        severity: "critical".to_string(),
+        incident_class: "DatabaseLag".to_string(),
+        runbook_name: "Auto-Mitigate Database Lag".to_string(),
+    });
+
+    utility_backend::incident::init_global_incident_manager(incident_manager.clone());
 
     let state = AppState {
         sequencer,
@@ -60,6 +114,7 @@ async fn main() -> anyhow::Result<()> {
         advisory_lock,
         breaker,
         rate_limiter,
+        tenant_rate_limiter,
     };
 
     let app = utility_backend::api::router::build_router(state).await?;
