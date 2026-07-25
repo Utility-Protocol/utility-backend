@@ -29,12 +29,14 @@ impl SettlementExecutor {
 
     /// Submit one settlement payload to `dest_shard`. Returns the assigned
     /// `msg_id`. Flow control / spillover is enforced inside the router.
+    #[tracing::instrument(skip(self, payload), fields(otel.kind = "producer", messaging.system = "settlement"))]
     pub async fn submit_cross_shard(&self, dest_shard: u64, payload: Vec<u8>) -> io::Result<u64> {
         self.router.send(dest_shard, payload).await
     }
 
     /// Submit a batch of payloads to `dest_shard`, returning the assigned ids in
     /// order. Credits are acquired per message by the router as each is enqueued.
+    #[tracing::instrument(skip(self, payloads), fields(otel.kind = "producer", messaging.system = "settlement"))]
     pub async fn submit_batch(
         &self,
         dest_shard: u64,

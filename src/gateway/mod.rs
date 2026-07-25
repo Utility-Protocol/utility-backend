@@ -1,6 +1,9 @@
 pub mod crypto;
+pub mod hlc;
 pub mod lock;
 pub mod mtls;
+pub mod ordering;
 pub mod parser;
 pub mod stream;
 pub mod telemetry;
+pub mod watermark;
