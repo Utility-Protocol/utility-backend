@@ -1,3 +1,6 @@
+pub mod client;
+pub mod mtls;
+
 use crate::api::metrics;
 use std::time::Duration;
 use thiserror::Error;
