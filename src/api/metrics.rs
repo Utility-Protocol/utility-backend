@@ -530,23 +530,32 @@ pub fn record_slo_request(route: &str, status_code: u16, latency_seconds: f64) {
     SLO_REQUESTS_TOTAL
         .with_label_values(&[route, status_class])
         .inc();
-    SLO_REQUEST_LATENCY_SECONDS
-        .with_label_values(&[route])
-        .observe(latency_seconds);
 }
 
-pub fn publish_slo_status(status: &crate::observability::slo::SloStatus) {
-    SLO_AVAILABILITY_BURN_RATE
-        .with_label_values(&["fast"])
-        .set(status.fast_window.availability_burn_rate);
-    SLO_AVAILABILITY_BURN_RATE
-        .with_label_values(&["slow"])
-        .set(status.slow_window.availability_burn_rate);
-    SLO_LATENCY_BURN_RATE
-        .with_label_values(&["fast"])
-        .set(status.fast_window.latency_burn_rate);
-    SLO_LATENCY_BURN_RATE
-        .with_label_values(&["slow"])
-        .set(status.slow_window.latency_burn_rate);
-    SLO_ALERT_ACTIVE.set(if status.alert_active { 1.0 } else { 0.0 });
+pub fn spawn_dlq_metrics_poller(pool: sqlx::PgPool, interval: std::time::Duration) {
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(interval);
+        loop {
+            ticker.tick().await;
+
+            let rows = sqlx::query_as::<_, (String, String, i64)>(
+                "SELECT queue_name, status, COUNT(*) FROM dead_letter_queue GROUP BY queue_name, status"
+            )
+            .fetch_all(&pool)
+            .await;
+
+            match rows {
+                Ok(counts) => {
+                    // Reset gauge to zero first if needed or just update seen ones.
+                    // Since Prometheus gauges retain their values, we update seen combinations:
+                    for (q_name, status, count) in counts {
+                        set_dlq_messages_count(&q_name, &status, count as f64);
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("failed to poll DLQ metrics: {}", e);
+                }
+            }
+        }
+    });
 }

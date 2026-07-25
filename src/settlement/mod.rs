@@ -1,5 +1,6 @@
 pub mod attestation_verifier;
 pub mod credit_flow;
+pub mod dlq;
 pub mod executor;
 pub mod finalizer;
 pub mod merkle;

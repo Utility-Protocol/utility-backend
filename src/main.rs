@@ -65,14 +65,9 @@ async fn main() -> anyhow::Result<()> {
         db_active_connection_poller(metrics_pool).await;
     });
 
-    let backup_verification_config = BackupVerificationConfig::from_env();
-    if backup_verification_config.enabled {
-        let backup_verifier =
-            BackupVerifier::new(db_pool.clone(), db_url.clone(), backup_verification_config);
-        spawn_backup_verification(backup_verifier);
-    } else {
-        tracing::info!("scheduled database backup restore verification is disabled");
-    }
+    // Spawn Dead Letter Queue metrics poller
+    let dlq_pool = db_pool.clone();
+    utility_backend::api::metrics::spawn_dlq_metrics_poller(dlq_pool, Duration::from_secs(10));
 
     // Initialise the global compression policy manager and spawn its
     // background monitoring task.
