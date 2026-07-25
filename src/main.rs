@@ -2,7 +2,6 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
-use tracing_subscriber::EnvFilter;
 
 use utility_backend::api::middleware::{DynamicRateLimiter, TenantRateLimiter};
 use utility_backend::api::AppState;
