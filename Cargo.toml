@@ -50,7 +50,7 @@ libc = "0.2"
 thread_local = "1"
 rocksdb = "0.24"
 p256 = { version = "0.13", features = ["ecdsa"] }
-ecdsa = "0.16"
+ecdsa = "0.17"
 x509-cert = { version = "0.2", features = ["builder"] }
 dcap-qvl = "0.5"
 tonic = "0.11"
