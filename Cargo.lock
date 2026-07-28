@@ -5408,7 +5408,7 @@ dependencies = [
  "rustls-pemfile 2.2.0",
  "serde",
  "serde_json",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "socket2 0.5.10",
  "sqlx",
  "tempfile",
