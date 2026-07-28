@@ -1,0 +1,91 @@
+name: backend-ci
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  lint-check-type:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('Cargo.lock') }}
+
+      - name: Rustfmt check
+        run: cargo fmt --all -- --check
+
+      - name: Clippy lint
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: utility
+          POSTGRES_PASSWORD: utility_secret
+          POSTGRES_DB: utility_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('Cargo.lock') }}
+
+      - name: Run database migrations
+        run: |
+          PGPASSWORD=utility_secret psql -h localhost -U utility -d utility_test -f src/time_series/compress.sql
+          PGPASSWORD=utility_secret psql -h localhost -U utility -d utility_test -f src/soroban/sync.sql
+          PGPASSWORD=utility_secret psql -h localhost -U utility -d utility_test -f src/settlement/schema.sql
+        env:
+          PGPASSWORD: utility_secret
+
+      - name: Run unit and integration tests
+        run: cargo test --all-features --verbose
+        env:
+          DATABASE_URL: postgres://utility:utility_secret@localhost:5432/utility_test
+
+      - name: Install cargo-tarpaulin
+        uses: taiki-e/install-action@cargo-tarpaulin
+
+      - name: Run code coverage with threshold enforcement
+        run: cargo tarpaulin --lib --all-features --fail-under 80 --engine llvm --verbose
+        env:
+          DATABASE_URL: postgres://utility:utility_secret@localhost:5432/utility_test
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t utility-backend .
