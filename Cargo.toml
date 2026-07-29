@@ -64,7 +64,7 @@ tonic-build = "0.11"
 protobuf-src = "2.1"
 
 [dev-dependencies]
-axum-test = "14"
+axum-test = "20"
 tempfile = "3"
 proptest = "1"
 criterion = "0.5"
