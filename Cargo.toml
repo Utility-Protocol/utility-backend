@@ -45,7 +45,7 @@ async-trait = "0.1"
 backoff = { version = "0.4", features = ["tokio"] }
 tokio-stream = "0.1"
 lru = "0.12"
-socket2 = { version = "0.5", features = ["all"] }
+socket2 = { version = "0.6", features = ["all"] }
 libc = "0.2"
 thread_local = "1"
 rocksdb = "0.24"
