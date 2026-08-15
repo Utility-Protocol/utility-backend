@@ -1,1 +1,4 @@
 /target
+
+# Rust incremental compilation temp artifacts
+*.rcgu.o
