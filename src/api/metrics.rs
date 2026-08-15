@@ -4,6 +4,9 @@ use prometheus::{
     register_histogram_vec, Counter, CounterVec, Gauge, GaugeVec, Histogram, HistogramVec,
 };
 
+use crate::observability::slo::SloStatus;
+use crate::resilience::{CapacityTier, FeatureFlag};
+
 lazy_static! {
     pub static ref GC_PAUSE_SECONDS: Gauge = register_gauge!(
         "utility_gc_pause_seconds",
@@ -530,6 +533,9 @@ pub fn record_slo_request(route: &str, status_code: u16, latency_seconds: f64) {
     SLO_REQUESTS_TOTAL
         .with_label_values(&[route, status_class])
         .inc();
+    SLO_REQUEST_LATENCY_SECONDS
+        .with_label_values(&[route])
+        .observe(latency_seconds);
 }
 
 pub fn spawn_dlq_metrics_poller(pool: sqlx::PgPool, interval: std::time::Duration) {
@@ -558,4 +564,176 @@ pub fn spawn_dlq_metrics_poller(pool: sqlx::PgPool, interval: std::time::Duratio
             }
         }
     });
+}
+
+lazy_static! {
+    pub static ref CAPACITY_UTILIZATION: GaugeVec = register_gauge_vec!(
+        "utility_capacity_utilization",
+        "Resource utilization by service and resource",
+        &["service", "resource"]
+    )
+    .unwrap();
+    pub static ref CAPACITY_DAYS_TO_CRITICAL: GaugeVec = register_gauge_vec!(
+        "utility_capacity_days_to_critical",
+        "Projected days until critical utilization (-1 when no criticality is forecast)",
+        &["service", "resource"]
+    )
+    .unwrap();
+    pub static ref AUDIT_VERIFICATIONS: CounterVec = register_counter_vec!(
+        "utility_audit_verifications_total",
+        "Audit chain verification events by outcome",
+        &["outcome"]
+    )
+    .unwrap();
+    pub static ref CACHE_OPERATIONS: CounterVec = register_counter_vec!(
+        "utility_cache_operations_total",
+        "Cache lookups by tier and result",
+        &["tier", "result"]
+    )
+    .unwrap();
+    pub static ref RESILIENCE_IN_FLIGHT: Gauge = register_gauge!(
+        "utility_resilience_in_flight",
+        "Current in-flight requests tracked by the resilience governor"
+    )
+    .unwrap();
+    pub static ref RESILIENCE_CAPACITY_TIER: Gauge = register_gauge!(
+        "utility_resilience_capacity_tier",
+        "Current capacity tier (0=normal, 1=degraded, 2=shed)"
+    )
+    .unwrap();
+    pub static ref RESILIENCE_SHED_REQUESTS: CounterVec = register_counter_vec!(
+        "utility_resilience_shed_requests_total",
+        "Requests shed by the resilience governor",
+        &["flag", "tier"]
+    )
+    .unwrap();
+    pub static ref BACKUP_VERIFICATION_DURATION_SECONDS: HistogramVec = register_histogram_vec!(
+        "utility_backup_verification_duration_seconds",
+        "Backup verification duration in seconds by outcome",
+        &["outcome"]
+    )
+    .unwrap();
+    pub static ref JOB_SCHEDULER_ENQUEUED: Counter = register_counter!(
+        "utility_job_scheduler_enqueued_total",
+        "Total jobs enqueued by the job scheduler"
+    )
+    .unwrap();
+    pub static ref JOB_SCHEDULER_CLAIMED: Counter = register_counter!(
+        "utility_job_scheduler_claimed_total",
+        "Total jobs claimed by workers"
+    )
+    .unwrap();
+    pub static ref JOB_SCHEDULER_HEARTBEATS: Counter = register_counter!(
+        "utility_job_scheduler_heartbeats_total",
+        "Total worker heartbeats observed by the job scheduler"
+    )
+    .unwrap();
+    pub static ref JOB_SCHEDULER_COMPLETED: Counter = register_counter!(
+        "utility_job_scheduler_completed_total",
+        "Total jobs completed successfully"
+    )
+    .unwrap();
+    pub static ref JOB_SCHEDULER_FAILED: Counter = register_counter!(
+        "utility_job_scheduler_failed_total",
+        "Total jobs that failed"
+    )
+    .unwrap();
+    pub static ref DLQ_MESSAGES: GaugeVec = register_gauge_vec!(
+        "utility_dlq_messages",
+        "Dead-letter queue messages by queue and status",
+        &["queue", "status"]
+    )
+    .unwrap();
+}
+
+pub fn set_capacity_forecast(
+    service: &str,
+    resource: &str,
+    _current_utilization: f64,
+    projected_utilization: f64,
+    days_to_critical: Option<f64>,
+) {
+    CAPACITY_UTILIZATION
+        .with_label_values(&[service, resource])
+        .set(projected_utilization);
+    CAPACITY_DAYS_TO_CRITICAL
+        .with_label_values(&[service, resource])
+        .set(days_to_critical.unwrap_or(-1.0));
+}
+
+pub fn publish_slo_status(status: &SloStatus) {
+    SLO_ALERT_ACTIVE.set(status.alert_active as u8 as f64);
+}
+
+pub fn record_audit_verification(count: u64) {
+    AUDIT_VERIFICATIONS
+        .with_label_values(&["success"])
+        .inc_by(count as f64);
+}
+
+pub fn record_audit_verification_failure(reason: &str) {
+    AUDIT_VERIFICATIONS.with_label_values(&[reason]).inc();
+}
+
+pub fn record_cache_hit(tier: &str) {
+    CACHE_OPERATIONS.with_label_values(&[tier, "hit"]).inc();
+}
+
+pub fn record_cache_miss(tier: &str) {
+    CACHE_OPERATIONS.with_label_values(&[tier, "miss"]).inc();
+}
+
+pub fn set_resilience_in_flight(count: f64) {
+    RESILIENCE_IN_FLIGHT.set(count);
+}
+
+pub fn set_resilience_capacity_tier(tier: CapacityTier) {
+    RESILIENCE_CAPACITY_TIER.set(tier as i64 as f64);
+}
+
+pub fn inc_resilience_shed(flag: Option<FeatureFlag>, tier: CapacityTier) {
+    let flag = match flag {
+        Some(f) => format!("{:?}", f),
+        None => "none".to_string(),
+    };
+    let tier = format!("{:?}", tier);
+    RESILIENCE_SHED_REQUESTS
+        .with_label_values(&[&flag, &tier])
+        .inc();
+}
+
+pub fn record_backup_verification_success(duration_seconds: f64) {
+    BACKUP_VERIFICATION_DURATION_SECONDS
+        .with_label_values(&["success"])
+        .observe(duration_seconds);
+}
+
+pub fn record_backup_verification_failure(duration_seconds: f64) {
+    BACKUP_VERIFICATION_DURATION_SECONDS
+        .with_label_values(&["failure"])
+        .observe(duration_seconds);
+}
+
+pub fn inc_job_scheduler_enqueued() {
+    JOB_SCHEDULER_ENQUEUED.inc();
+}
+
+pub fn inc_job_scheduler_claimed(count: u64) {
+    JOB_SCHEDULER_CLAIMED.inc_by(count);
+}
+
+pub fn inc_job_scheduler_heartbeat() {
+    JOB_SCHEDULER_HEARTBEATS.inc();
+}
+
+pub fn inc_job_scheduler_completed() {
+    JOB_SCHEDULER_COMPLETED.inc();
+}
+
+pub fn inc_job_scheduler_failed() {
+    JOB_SCHEDULER_FAILED.inc();
+}
+
+pub fn set_dlq_messages_count(queue: &str, status: &str, count: f64) {
+    DLQ_MESSAGES.with_label_values(&[queue, status]).set(count);
 }

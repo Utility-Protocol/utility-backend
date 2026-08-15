@@ -14,7 +14,12 @@
 //!
 //! Lengths: trace_id = 32 hex, span_id = 16 hex, flags = 2 hex.
 
-use opentelemetry::{global, propagation::Injector, Context};
+use opentelemetry::{
+    global,
+    propagation::Injector,
+    trace::{TraceContextExt, Tracer},
+    Context,
+};
 use std::collections::HashMap;
 
 /// Inject the trace context from `cx` into a set of Kafka record headers.
@@ -69,11 +74,7 @@ impl<'a> opentelemetry::propagation::Extractor for KafkaHeaderExtractor<'a> {
 /// // ... process the record ...
 /// drop(span);
 /// ```
-pub fn start_consumer_span(
-    parent_context: &Context,
-    topic: &str,
-    partition: i32,
-) -> tracing::Span {
+pub fn start_consumer_span(parent_context: &Context, topic: &str, partition: i32) -> tracing::Span {
     let tracer = global::tracer("kafka-consumer");
     let span = tracer
         .span_builder(format!("kafka.consume {}", topic))
@@ -99,7 +100,10 @@ pub fn start_consumer_span(
 /// // ... produce the record with headers ...
 /// drop(span);
 /// ```
-pub fn start_producer_span(topic: &str, partition: i32) -> (HashMap<String, String>, tracing::Span) {
+pub fn start_producer_span(
+    topic: &str,
+    partition: i32,
+) -> (HashMap<String, String>, tracing::Span) {
     let tracer = global::tracer("kafka-producer");
     let mut span = tracer
         .span_builder(format!("kafka.produce {}", topic))
@@ -142,13 +146,21 @@ mod tests {
 
         let trace_id = TraceId::from_hex("4bf92f3577b34da6a3ce929d0e0e4736").unwrap();
         let span_id = SpanId::from_hex("00f067aa0ba902b7").unwrap();
-        let span_context =
-            SpanContext::new(trace_id, span_id, TraceFlags::SAMPLED, false, TraceState::default());
+        let span_context = SpanContext::new(
+            trace_id,
+            span_id,
+            TraceFlags::SAMPLED,
+            false,
+            TraceState::default(),
+        );
         let cx = Context::new().with_remote_span_context(span_context);
 
         let headers = inject_into_kafka_headers(&cx);
 
-        assert!(headers.contains_key("traceparent"), "traceparent must be injected");
+        assert!(
+            headers.contains_key("traceparent"),
+            "traceparent must be injected"
+        );
 
         let extracted = extract_from_kafka_headers(&headers);
 

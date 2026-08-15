@@ -185,7 +185,7 @@ where
         let mut attempt = 0;
         let started = std::time::Instant::now();
 
-        let mut last_transient_error: Option<String> = None;
+        let mut last_transient_error: Option<String>;
 
         loop {
             attempt += 1;
@@ -243,8 +243,7 @@ where
                         sleep(self.retry.delay_for(attempt)).await;
                     } else {
                         metrics::record_webhook_delivery(&endpoint.id, "failed");
-                        last_transient_error =
-                            Some("delivery timed out after max attempts".into());
+                        last_transient_error = Some("delivery timed out after max attempts".into());
                         break;
                     }
                 }
@@ -257,8 +256,7 @@ where
         }
 
         // All retries exhausted — move to dead-letter queue.
-        let error_msg =
-            last_transient_error.unwrap_or_else(|| "unknown delivery failure".into());
+        let error_msg = last_transient_error.unwrap_or_else(|| "unknown delivery failure".into());
         if let Some(ref dlq) = self.dlq {
             let _ = dlq
                 .enqueue(

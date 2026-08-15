@@ -1,7 +1,5 @@
 use lazy_static::lazy_static;
-use prometheus::{
-    register_counter_vec, register_histogram_vec, CounterVec, HistogramVec,
-};
+use prometheus::{register_counter_vec, register_histogram_vec, CounterVec, HistogramVec};
 
 lazy_static! {
     pub static ref INCIDENTS_TRIGGERED: CounterVec = register_counter_vec!(
@@ -10,21 +8,18 @@ lazy_static! {
         &["component", "severity"]
     )
     .unwrap();
-
     pub static ref INCIDENTS_RESOLVED: CounterVec = register_counter_vec!(
         "utility_incidents_resolved_total",
         "Total number of incidents resolved",
         &["component"]
     )
     .unwrap();
-
     pub static ref RUNBOOK_EXECUTION_LATENCY: HistogramVec = register_histogram_vec!(
         "utility_runbook_execution_latency_seconds",
         "Duration of automated runbook execution in seconds",
         &["runbook_name", "action_type"]
     )
     .unwrap();
-
     pub static ref PAGERDUTY_API_REQUESTS: CounterVec = register_counter_vec!(
         "utility_pagerduty_api_requests_total",
         "Total PagerDuty Events API V2 requests made",

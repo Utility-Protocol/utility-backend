@@ -1,5 +1,5 @@
-use std::time::{Duration, Instant};
 use serde_json::json;
+use std::time::{Duration, Instant};
 
 use utility_backend::incident::{
     AutomationRule, IncidentManager, IncidentStatus, PagerDutyClient, Runbook, RunbookAction,
@@ -102,7 +102,10 @@ async fn test_incident_manager_lifecycle_and_runbook() {
     let runbook_log = &logs[0];
     assert_eq!(runbook_log.runbook_name, "Scale Ingestion Workers");
     assert_eq!(runbook_log.status, "success");
-    assert!(runbook_log.logs.iter().any(|l| l.contains("Scaled ingestion-worker to 10 replicas")));
+    assert!(runbook_log
+        .logs
+        .iter()
+        .any(|l| l.contains("Scaled ingestion-worker to 10 replicas")));
 
     // 3. Acknowledge incident
     let res = manager.acknowledge_incident("inc-001".to_string());

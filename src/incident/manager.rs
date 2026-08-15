@@ -31,8 +31,8 @@ impl std::fmt::Display for IncidentStatus {
 pub struct Incident {
     pub id: String,
     pub title: String,
-    pub severity: String, // critical, error, warning, info
-    pub component: String, // TimeSeries, Settlement, Gateway, API, etc.
+    pub severity: String,       // critical, error, warning, info
+    pub component: String,      // TimeSeries, Settlement, Gateway, API, etc.
     pub incident_class: String, // DatabaseLag, TransactionFailure, etc.
     pub status: IncidentStatus,
     pub custom_details: Option<serde_json::Value>,
@@ -203,7 +203,9 @@ impl IncidentManager {
                     let client_clone = self.pd_client.clone();
                     let id_clone = id.clone();
                     tokio::spawn(async move {
-                        let _ = client_clone.enqueue_event("trigger", &id_clone, Some(pd_payload)).await;
+                        let _ = client_clone
+                            .enqueue_event("trigger", &id_clone, Some(pd_payload))
+                            .await;
                     });
 
                     // Evaluate matching automation rules

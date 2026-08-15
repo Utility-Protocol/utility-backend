@@ -117,7 +117,9 @@ impl Finalizer {
                     &msg_id_str,
                     &dlq_payload,
                     Some(&e.to_string()),
-                ).await {
+                )
+                .await
+                {
                     tracing::error!(error = %dlq_err, "failed to send message to DLQ");
                 }
 

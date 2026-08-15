@@ -187,8 +187,7 @@ pub(crate) fn is_retryable(status: u16) -> bool {
 
 pub(crate) fn subtle_eq(a: &[u8], b: &[u8]) -> bool {
     a.len() == b.len()
-        && a
-            .iter()
+        && a.iter()
             .zip(b.iter())
             .fold(0u8, |acc, (left, right)| acc | (left ^ right))
             == 0

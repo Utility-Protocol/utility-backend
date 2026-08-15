@@ -14,9 +14,8 @@ use utility_backend::settlement::mint_queue::MintQueue;
 use utility_backend::soroban::rpc::CircuitBreaker;
 
 async fn setup_test_db() -> Option<sqlx::PgPool> {
-    let db_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
-        "postgres://utility:utility_secret@localhost:5432/utility_test".into()
-    });
+    let db_url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://utility:utility_secret@localhost:5432/utility_test".into());
 
     match sqlx::PgPool::connect(&db_url).await {
         Ok(pool) => {
@@ -148,10 +147,7 @@ async fn test_finalizer_automatic_dead_lettering() {
         format!("{}:{}", batch_id, resource_type)
     );
     assert_eq!(dlq_msg.payload.get("batch_id").unwrap(), batch_id);
-    assert_eq!(
-        dlq_msg.payload.get("resource_type").unwrap(),
-        resource_type
-    );
+    assert_eq!(dlq_msg.payload.get("resource_type").unwrap(), resource_type);
     assert_eq!(dlq_msg.payload.get("amount").unwrap(), 150.0);
     assert_eq!(dlq_msg.payload.get("destination").unwrap(), destination);
 }

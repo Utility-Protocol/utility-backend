@@ -1,6 +1,6 @@
 use crate::api::middleware::{DynamicRateLimiter, TenantRateLimiter};
+use crate::gateway::hlc::HybridLogicalClock;
 use crate::gateway::lock::AdvisoryLock;
-use crate::incident::IncidentManager;
 use crate::soroban::rpc::CircuitBreaker;
 use crate::soroban::sequencer::NonceSequencer;
 use axum::extract::FromRef;
@@ -23,6 +23,7 @@ pub struct AppState {
     pub breaker: Arc<Mutex<CircuitBreaker>>,
     pub rate_limiter: Arc<DynamicRateLimiter>,
     pub tenant_rate_limiter: Arc<TenantRateLimiter>,
+    pub hlc: Arc<HybridLogicalClock>,
 }
 
 impl FromRef<AppState> for Arc<NonceSequencer> {
@@ -58,5 +59,11 @@ impl FromRef<AppState> for Arc<DynamicRateLimiter> {
 impl FromRef<AppState> for Arc<TenantRateLimiter> {
     fn from_ref(state: &AppState) -> Self {
         state.tenant_rate_limiter.clone()
+    }
+}
+
+impl FromRef<AppState> for Arc<HybridLogicalClock> {
+    fn from_ref(state: &AppState) -> Self {
+        state.hlc.clone()
     }
 }

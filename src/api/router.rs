@@ -33,7 +33,10 @@ pub async fn build_router(state: AppState) -> anyhow::Result<Router> {
         .route("/api/v1/nonce/status", get(handlers::nonce_status))
         .route("/api/v1/gateway/locks", get(handlers::list_gateway_locks))
         .route("/api/v1/dlq", get(handlers::list_dlq))
-        .route("/api/v1/dlq/:id", get(handlers::get_dlq).delete(handlers::delete_dlq))
+        .route(
+            "/api/v1/dlq/:id",
+            get(handlers::get_dlq).delete(handlers::delete_dlq),
+        )
         .route("/api/v1/dlq/:id/retry", post(handlers::retry_dlq))
         .route("/metrics", get(handlers::metrics_handler))
         .route("/debug/clock_state", get(handlers::clock_state))
@@ -56,8 +59,7 @@ pub async fn build_router(state: AppState) -> anyhow::Result<Router> {
         )
         .route(
             "/api/v1/webhooks/endpoints",
-            get(handlers::list_webhook_endpoints)
-                .post(handlers::create_webhook_endpoint),
+            get(handlers::list_webhook_endpoints).post(handlers::create_webhook_endpoint),
         )
         .route(
             "/api/v1/webhooks/endpoints/:id",

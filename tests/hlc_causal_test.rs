@@ -107,7 +107,11 @@ fn test_hlc_causal_order_across_collectors() {
     assert_eq!(ts_b.physical(), wall);
     // A has logical=0, B has logical=1
     assert_eq!(ts_a.logical(), 0);
-    assert_eq!(ts_b.logical(), 0, "separate HLCs both start at logical 0 for the same physical time");
+    assert_eq!(
+        ts_b.logical(),
+        0,
+        "separate HLCs both start at logical 0 for the same physical time"
+    );
 
     // Now simulate collector B receiving event A's HLC timestamp.
     // This is the "HLC propagation" rule.
@@ -115,9 +119,12 @@ fn test_hlc_causal_order_across_collectors() {
     // After update, B's logical should advance to be > A's logical
     let ts_c = hlc_b.tick(wall);
     assert_eq!(ts_c.physical(), wall);
-    assert!(ts_c.logical() > ts_a.logical(),
+    assert!(
+        ts_c.logical() > ts_a.logical(),
         "after receiving A's HLC, B's logical should advance: {} > {}",
-        ts_c.logical(), ts_a.logical());
+        ts_c.logical(),
+        ts_a.logical()
+    );
 }
 
 /// Test that HlcWatermarkStore CRDT merge resolves correctly using HLC.
@@ -147,7 +154,10 @@ fn test_watermark_crdt_merge_with_hlc() {
         10,
         "higher HLC logical should win"
     );
-    assert_eq!(merged.last_offset, 8, "offset should come from winning entry");
+    assert_eq!(
+        merged.last_offset, 8,
+        "offset should come from winning entry"
+    );
 }
 
 /// Test the HLC format packing/unpacking.
@@ -168,15 +178,11 @@ fn test_concurrent_hlc_tick() {
 
     for _ in 0..100 {
         let c = hlc.clone();
-        handles.push(thread::spawn(move || {
-            c.tick(wall)
-        }));
+        handles.push(thread::spawn(move || c.tick(wall)));
     }
 
-    let mut timestamps: Vec<HlcTimestamp> = handles
-        .into_iter()
-        .map(|h| h.join().unwrap())
-        .collect();
+    let mut timestamps: Vec<HlcTimestamp> =
+        handles.into_iter().map(|h| h.join().unwrap()).collect();
 
     timestamps.sort();
 

@@ -57,7 +57,7 @@ pub fn start_query_span(operation: &str, table: Option<&str>) -> QuerySpanGuard 
         db.sql.table = table.unwrap_or(""),
         otel.kind = "client",
     );
-    let entered = span.enter();
+    let entered = span.entered();
     QuerySpanGuard {
         span,
         entered: Some(entered),
@@ -168,9 +168,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_trace_query_error() {
-        let result: Result<i32, String> = trace_query("INSERT", Some("test_table"), "INSERT INTO x VALUES (1)", || async {
-            Err("constraint violation".to_string())
-        }).await;
-        assert!(result.is_err());
+        let result: Result<Result<i32, String>, String> = trace_query(
+            "INSERT",
+            Some("test_table"),
+            "INSERT INTO x VALUES (1)",
+            || async { Err("constraint violation".to_string()) },
+        )
+        .await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_err());
     }
 }

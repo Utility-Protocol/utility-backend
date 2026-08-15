@@ -1,20 +1,20 @@
+use opentelemetry::baggage::BaggageExt as _;
+use opentelemetry::trace::TraceContextExt as _;
+use opentelemetry::trace::TracerProvider as _;
+use opentelemetry::{global, Context};
+use opentelemetry_otlp::WithExportConfig as _;
+use opentelemetry_sdk::propagation::TextMapCompositePropagator;
+use opentelemetry_sdk::trace::{self as sdktrace, Sampler};
 use std::collections::HashMap;
 use std::fmt;
 use tracing::{Event, Subscriber};
 use tracing_subscriber::{
     fmt::{format::Writer, FmtContext, FormatEvent, FormatFields},
-    registry::LookupSpan,
     layer::SubscriberExt,
+    registry::LookupSpan,
     util::SubscriberInitExt,
     EnvFilter,
 };
-use opentelemetry::{global, Context};
-use opentelemetry_sdk::trace::{self as sdktrace, Sampler};
-use opentelemetry::trace::TracerProvider as _;
-use opentelemetry::baggage::BaggageExt as _;
-use opentelemetry_otlp::WithExportConfig as _;
-use opentelemetry_sdk::propagation::TextMapCompositePropagator;
-use opentelemetry::trace::TraceContextExt as _;
 
 pub struct OtelJsonFormatter {
     service_name: String,
@@ -24,11 +24,10 @@ pub struct OtelJsonFormatter {
 
 impl OtelJsonFormatter {
     pub fn new() -> Self {
-        let service_name = std::env::var("OTEL_SERVICE_NAME")
-            .unwrap_or_else(|_| "utility-backend".to_string());
+        let service_name =
+            std::env::var("OTEL_SERVICE_NAME").unwrap_or_else(|_| "utility-backend".to_string());
         let service_version = env!("CARGO_PKG_VERSION").to_string();
-        let environment = std::env::var("APP_ENV")
-            .unwrap_or_else(|_| "production".to_string());
+        let environment = std::env::var("APP_ENV").unwrap_or_else(|_| "production".to_string());
 
         Self {
             service_name,
@@ -56,7 +55,8 @@ impl tracing::field::Visit for OtelEventVisitor {
         if field_name == "message" {
             self.message = val_str;
         } else {
-            self.attributes.insert(field_name.to_string(), serde_json::Value::String(val_str));
+            self.attributes
+                .insert(field_name.to_string(), serde_json::Value::String(val_str));
         }
     }
 
@@ -65,27 +65,41 @@ impl tracing::field::Visit for OtelEventVisitor {
         if field_name == "message" {
             self.message = value.to_string();
         } else {
-            self.attributes.insert(field_name.to_string(), serde_json::Value::String(value.to_string()));
+            self.attributes.insert(
+                field_name.to_string(),
+                serde_json::Value::String(value.to_string()),
+            );
         }
     }
 
     fn record_i64(&mut self, field: &tracing::field::Field, value: i64) {
-        self.attributes.insert(field.name().to_string(), serde_json::Value::Number(value.into()));
+        self.attributes.insert(
+            field.name().to_string(),
+            serde_json::Value::Number(value.into()),
+        );
     }
 
     fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
-        self.attributes.insert(field.name().to_string(), serde_json::Value::Number(value.into()));
+        self.attributes.insert(
+            field.name().to_string(),
+            serde_json::Value::Number(value.into()),
+        );
     }
 
     fn record_bool(&mut self, field: &tracing::field::Field, value: bool) {
-        self.attributes.insert(field.name().to_string(), serde_json::Value::Bool(value));
+        self.attributes
+            .insert(field.name().to_string(), serde_json::Value::Bool(value));
     }
 
     fn record_f64(&mut self, field: &tracing::field::Field, value: f64) {
         if let Some(num) = serde_json::Number::from_f64(value) {
-            self.attributes.insert(field.name().to_string(), serde_json::Value::Number(num));
+            self.attributes
+                .insert(field.name().to_string(), serde_json::Value::Number(num));
         } else {
-            self.attributes.insert(field.name().to_string(), serde_json::Value::String(value.to_string()));
+            self.attributes.insert(
+                field.name().to_string(),
+                serde_json::Value::String(value.to_string()),
+            );
         }
     }
 }
@@ -133,7 +147,9 @@ where
         let baggage = otel_ctx.baggage();
         for key in &["region", "substation_id", "grid_segment"] {
             if let Some(val) = baggage.get(*key) {
-                visitor.attributes.insert(key.to_string(), serde_json::Value::String(val.to_string()));
+                visitor
+                    .attributes
+                    .insert(key.to_string(), serde_json::Value::String(val.to_string()));
             }
         }
 
@@ -147,10 +163,16 @@ where
         };
 
         if let Some(file) = metadata.file() {
-            visitor.attributes.insert("code.filepath".to_string(), serde_json::Value::String(file.to_string()));
+            visitor.attributes.insert(
+                "code.filepath".to_string(),
+                serde_json::Value::String(file.to_string()),
+            );
         }
         if let Some(line) = metadata.line() {
-            visitor.attributes.insert("code.lineno".to_string(), serde_json::Value::Number(line.into()));
+            visitor.attributes.insert(
+                "code.lineno".to_string(),
+                serde_json::Value::Number(line.into()),
+            );
         }
 
         let mut log_record = serde_json::json!({
@@ -165,14 +187,23 @@ where
         });
 
         if let Some(t_id) = trace_id {
-            log_record.as_object_mut().unwrap().insert("trace_id".to_string(), serde_json::Value::String(t_id));
+            log_record
+                .as_object_mut()
+                .unwrap()
+                .insert("trace_id".to_string(), serde_json::Value::String(t_id));
         }
         if let Some(s_id) = span_id {
-            log_record.as_object_mut().unwrap().insert("span_id".to_string(), serde_json::Value::String(s_id));
+            log_record
+                .as_object_mut()
+                .unwrap()
+                .insert("span_id".to_string(), serde_json::Value::String(s_id));
         }
 
         if !visitor.attributes.is_empty() {
-            log_record.as_object_mut().unwrap().insert("attributes".to_string(), serde_json::to_value(visitor.attributes).unwrap());
+            log_record.as_object_mut().unwrap().insert(
+                "attributes".to_string(),
+                serde_json::to_value(visitor.attributes).unwrap(),
+            );
         }
 
         let serialized = serde_json::to_string(&log_record).map_err(|_| fmt::Error)?;
@@ -190,13 +221,16 @@ pub fn init_structured_logging() -> anyhow::Result<()> {
     // 2. Setup the global tracer provider
     // If an OTLP endpoint is specified, configure the OTLP pipeline, otherwise fallback to local
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
-    let fmt_layer = tracing_subscriber::fmt::layer()
-        .event_format(OtelJsonFormatter::new());
+    let fmt_layer = tracing_subscriber::fmt::layer().event_format(OtelJsonFormatter::new());
 
     if let Ok(endpoint) = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT") {
         if let Ok(tracer) = opentelemetry_otlp::new_pipeline()
             .tracing()
-            .with_exporter(opentelemetry_otlp::new_exporter().tonic().with_endpoint(endpoint))
+            .with_exporter(
+                opentelemetry_otlp::new_exporter()
+                    .tonic()
+                    .with_endpoint(endpoint),
+            )
             .with_trace_config(sdktrace::Config::default().with_sampler(Sampler::AlwaysOn))
             .install_batch(opentelemetry_sdk::runtime::Tokio)
         {
@@ -222,7 +256,7 @@ pub fn init_structured_logging() -> anyhow::Result<()> {
         .with(env_filter)
         .with(otel_layer)
         .with(fmt_layer)
-                .init();
+        .init();
 
     Ok(())
 }

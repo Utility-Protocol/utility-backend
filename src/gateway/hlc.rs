@@ -35,6 +35,7 @@ impl Ord for HlcTimestamp {
     }
 }
 
+#[derive(Debug)]
 pub struct HybridLogicalClock {
     current: AtomicU64,
 }

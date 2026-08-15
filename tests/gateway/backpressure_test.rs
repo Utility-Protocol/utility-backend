@@ -4,15 +4,14 @@ use utility_backend::gateway::stream::{
     EventPriority, FileSpillStore, MeterEvent, PriorityBackpressureFilter, PushOutcome, SpillCodec,
     SpillStore,
 };
-use utility_backend::ingestion::tai64n::Tai64N;
 
 fn event(meter_id: &str) -> MeterEvent {
     MeterEvent {
         meter_id: meter_id.to_string(),
-        timestamp_tai: Tai64N::now_with_correction(0),
-        correction_ns: 0,
+        timestamp: 0,
         reading: 0.0,
         token_volume: 0,
+        hlc_timestamp: 0,
     }
 }
 

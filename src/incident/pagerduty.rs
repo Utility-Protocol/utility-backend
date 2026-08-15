@@ -47,8 +47,8 @@ impl PagerDutyClient {
             .build()
             .unwrap_or_default();
 
-        let endpoint = endpoint
-            .unwrap_or_else(|| "https://events.pagerduty.com/v2/enqueue".to_string());
+        let endpoint =
+            endpoint.unwrap_or_else(|| "https://events.pagerduty.com/v2/enqueue".to_string());
 
         Self {
             client,
@@ -127,12 +127,25 @@ impl PagerDutyClient {
                 })?;
                 Ok(pd_res)
             } else if status.is_server_error() || status == StatusCode::TOO_MANY_REQUESTS {
-                warn!("Transient error from PagerDuty (Status {}). Retrying...", status);
-                Err(backoff::Error::transient(anyhow::anyhow!("status: {}", status)))
+                warn!(
+                    "Transient error from PagerDuty (Status {}). Retrying...",
+                    status
+                );
+                Err(backoff::Error::transient(anyhow::anyhow!(
+                    "status: {}",
+                    status
+                )))
             } else {
                 let err_text = res.text().await.unwrap_or_default();
-                error!("Permanent error from PagerDuty API (Status {}): {}", status, err_text);
-                Err(backoff::Error::permanent(anyhow::anyhow!("status: {}, body: {}", status, err_text)))
+                error!(
+                    "Permanent error from PagerDuty API (Status {}): {}",
+                    status, err_text
+                );
+                Err(backoff::Error::permanent(anyhow::anyhow!(
+                    "status: {}, body: {}",
+                    status,
+                    err_text
+                )))
             }
         };
 

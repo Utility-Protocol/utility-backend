@@ -2,6 +2,7 @@ pub mod api;
 pub mod audit;
 pub mod blockchain;
 pub mod cache;
+pub mod capacity;
 pub mod gateway;
 pub mod identity;
 pub mod incident;

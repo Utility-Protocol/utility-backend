@@ -11,8 +11,7 @@ use lazy_static::lazy_static;
 use std::sync::{Arc, Mutex};
 
 lazy_static! {
-    static ref GLOBAL_INCIDENT_MANAGER: Mutex<Option<Arc<IncidentManager>>> =
-        Mutex::new(None);
+    static ref GLOBAL_INCIDENT_MANAGER: Mutex<Option<Arc<IncidentManager>>> = Mutex::new(None);
 }
 
 /// Initialises the global incident manager so non-API background components can access it.

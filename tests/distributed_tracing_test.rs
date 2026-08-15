@@ -8,6 +8,8 @@
 //! - Custom spans on key operations (settlement, registration)
 //! - trace_id correlation in log entries
 
+use opentelemetry::trace::{SpanContext, TraceContextExt, TraceFlags, TraceId, TraceState};
+use std::collections::HashMap;
 use utility_backend::gateway::telemetry::{
     context_with_spatial_baggage, extract_context, init_open_telemetry, inject_context,
     spatial_baggage_from_context, SpatialBaggage,
@@ -15,8 +17,6 @@ use utility_backend::gateway::telemetry::{
 use utility_backend::tracing::kafka_propagator::{
     extract_from_kafka_headers, inject_into_kafka_headers,
 };
-use opentelemetry::trace::{SpanContext, TraceContextExt, TraceFlags, TraceId, TraceState};
-use std::collections::HashMap;
 
 // ── OTLP Exporter & TracerProvider ──────────────────────────────────
 
@@ -43,7 +43,13 @@ fn test_w3c_traceparent_and_baggage_roundtrip() {
 
     let trace_id = TraceId::from_hex("4bf92f3577b34da6a3ce929d0e0e4736").unwrap();
     let span_id = opentelemetry::trace::SpanId::from_hex("00f067aa0ba902b7").unwrap();
-    let ctx = SpanContext::new(trace_id, span_id, TraceFlags::SAMPLED, false, TraceState::default());
+    let ctx = SpanContext::new(
+        trace_id,
+        span_id,
+        TraceFlags::SAMPLED,
+        false,
+        TraceState::default(),
+    );
     let parent = opentelemetry::Context::new().with_remote_span_context(ctx);
     let parent = context_with_spatial_baggage(
         &parent,
@@ -63,8 +69,8 @@ fn test_w3c_traceparent_and_baggage_roundtrip() {
 
     // Round-trip extraction
     let extracted = extract_context(&carrier);
-    let spatial = spatial_baggage_from_context(&extracted)
-        .expect("spatial baggage must survive round-trip");
+    let spatial =
+        spatial_baggage_from_context(&extracted).expect("spatial baggage must survive round-trip");
     assert_eq!(spatial.region, "north-east");
     assert_eq!(spatial.substation_id, "SUB-42");
     assert_eq!(spatial.grid_segment, "grid-a");
@@ -83,7 +89,13 @@ fn test_kafka_headers_inject_extract_roundtrip() {
 
     let trace_id = TraceId::from_hex("4bf92f3577b34da6a3ce929d0e0e4736").unwrap();
     let span_id = opentelemetry::trace::SpanId::from_hex("00f067aa0ba902b7").unwrap();
-    let ctx = SpanContext::new(trace_id, span_id, TraceFlags::SAMPLED, false, TraceState::default());
+    let ctx = SpanContext::new(
+        trace_id,
+        span_id,
+        TraceFlags::SAMPLED,
+        false,
+        TraceState::default(),
+    );
     let parent = opentelemetry::Context::new().with_remote_span_context(ctx);
 
     let headers = inject_into_kafka_headers(&parent);
@@ -142,26 +154,24 @@ fn test_db_query_span_guard_does_not_panic() {
 
 #[tokio::test]
 async fn test_db_trace_query_success_path() {
-    let result: Result<i32, String> =
-        utility_backend::tracing::db_tracing::trace_query(
-            "SELECT",
-            Some("test_table"),
-            "SELECT 1",
-            || async { Ok(42) },
-        )
-        .await;
+    let result: Result<i32, String> = utility_backend::tracing::db_tracing::trace_query(
+        "SELECT",
+        Some("test_table"),
+        "SELECT 1",
+        || async { Ok(42) },
+    )
+    .await;
     assert_eq!(result, Ok(42));
 }
 
 #[tokio::test]
 async fn test_db_trace_query_error_path() {
-    let result: Result<i32, String> =
-        utility_backend::tracing::db_tracing::trace_query(
-            "INSERT",
-            Some("test_table"),
-            "INSERT INTO x VALUES (1)",
-            || async { Err("constraint violation".to_string()) },
-        )
-        .await;
+    let result: Result<i32, String> = utility_backend::tracing::db_tracing::trace_query(
+        "INSERT",
+        Some("test_table"),
+        "INSERT INTO x VALUES (1)",
+        || async { Err("constraint violation".to_string()) },
+    )
+    .await;
     assert!(result.is_err());
 }

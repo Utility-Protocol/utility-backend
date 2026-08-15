@@ -98,10 +98,7 @@ async fn test_tenant_rate_limit_anonymous() {
         .with_state(tenant_limiter.clone());
 
     let send_no_header = |app: Router| async move {
-        let req = Request::builder()
-            .uri("/")
-            .body(Body::empty())
-            .unwrap();
+        let req = Request::builder().uri("/").body(Body::empty()).unwrap();
         tower::ServiceExt::oneshot(app, req).await.unwrap()
     };
 

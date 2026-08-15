@@ -2,7 +2,6 @@ use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use tracing::trace;
 
 use crate::gateway::hlc::{HlcTimestamp, HybridLogicalClock};
 use crate::gateway::stream::MeterEvent;
@@ -119,7 +118,7 @@ impl CausalOrderer {
         }
     }
 
-    pub fn spawn(mut self) {
+    pub fn spawn(self) {
         tokio::spawn(async move {
             self.flush_loop().await;
         });

@@ -20,7 +20,7 @@ use crate::time_series::analytics::{global_engine, DiagnosticReport};
 use crate::time_series::compression::CompressionStatus;
 use crate::time_series::drift::CalibrationResult;
 use crate::time_series::ingestion::ingest_telemetry;
-use crate::webhooks::dead_letter::{DeadLetterEntry, PostgresDlq};
+use crate::webhooks::dead_letter::{DeadLetterEntry, DeadLetterQueue, PostgresDlq};
 use crate::webhooks::dispatcher::WebhookDeliveryService;
 use crate::webhooks::{ReqwestWebhookTransport, RetryPolicy, WebhookEndpoint, WebhookEvent};
 use uuid::Uuid;
@@ -33,7 +33,7 @@ pub struct MeterInfo {
     pub last_reading: f64,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct ReadingSubmission {
     pub meter_id: String,
     pub value: f64,
@@ -656,11 +656,22 @@ pub async fn retry_dead_letter(
     State(pool): State<Pool<Postgres>>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<RetryDeadLetterResponse>, StatusCode> {
+    retry_dlq_entry(pool, id).await
+}
+
+async fn retry_dlq_entry(
+    pool: Pool<Postgres>,
+    id: Uuid,
+) -> Result<Json<RetryDeadLetterResponse>, StatusCode> {
     let dlq = PostgresDlq::new(pool.clone());
-    let entry = dlq.get(id).await.map_err(|e| {
-        tracing::error!(error = %e, "failed to get dead letter");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?.ok_or(StatusCode::NOT_FOUND)?;
+    let entry = dlq
+        .get(id)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "failed to get dead letter");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .ok_or(StatusCode::NOT_FOUND)?;
 
     // Look up the endpoint
     let row = sqlx::query_as::<_, (String, String)>(
@@ -707,4 +718,58 @@ pub async fn retry_dead_letter(
             attempts: 5,
         })),
     }
+}
+
+pub async fn list_dlq(
+    State(pool): State<Pool<Postgres>>,
+    Query(query): Query<DeadLetterQuery>,
+) -> Result<Json<Vec<DeadLetterEntry>>, StatusCode> {
+    let dlq = PostgresDlq::new(pool);
+    dlq.list(
+        query.endpoint_id.as_deref(),
+        query.limit.unwrap_or(50),
+        query.offset.unwrap_or(0),
+    )
+    .await
+    .map(Json)
+    .map_err(|e| {
+        tracing::error!(error = %e, "failed to list dead letters");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })
+}
+
+pub async fn get_dlq(
+    State(pool): State<Pool<Postgres>>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<DeadLetterEntry>, StatusCode> {
+    let dlq = PostgresDlq::new(pool);
+    dlq.get(id)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "failed to get dead letter");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
+pub async fn delete_dlq(
+    State(pool): State<Pool<Postgres>>,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, StatusCode> {
+    let dlq = PostgresDlq::new(pool);
+    dlq.remove(id)
+        .await
+        .map(|_| StatusCode::NO_CONTENT)
+        .map_err(|e| {
+            tracing::error!(error = %e, "failed to delete dead letter");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })
+}
+
+pub async fn retry_dlq(
+    State(pool): State<Pool<Postgres>>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<RetryDeadLetterResponse>, StatusCode> {
+    retry_dlq_entry(pool, id).await
 }

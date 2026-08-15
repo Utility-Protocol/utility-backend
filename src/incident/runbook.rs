@@ -1,16 +1,30 @@
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
-use crate::time_series::compression::global_compression_manager;
 use super::metrics::record_runbook_latency;
+use crate::time_series::compression::global_compression_manager;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum RunbookAction {
-    AdjustCompressionPolicy { compress_after_days: i32 },
-    ThrottleTenantRate { tenant_id: String, limit_per_sec: u32 },
-    ScaleResources { service: String, replicas: u32 },
-    CustomWebhook { url: String, payload_template: String },
-    NotifySlack { channel: String, message: String },
+    AdjustCompressionPolicy {
+        compress_after_days: i32,
+    },
+    ThrottleTenantRate {
+        tenant_id: String,
+        limit_per_sec: u32,
+    },
+    ScaleResources {
+        service: String,
+        replicas: u32,
+    },
+    CustomWebhook {
+        url: String,
+        payload_template: String,
+    },
+    NotifySlack {
+        channel: String,
+        message: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,9 +37,9 @@ pub struct Runbook {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AutomationRule {
     pub id: String,
-    pub component: String,       // TimeSeries, Settlement, Gateway, API, etc.
-    pub severity: String,        // critical, error, warning
-    pub incident_class: String,  // DatabaseLag, TransactionFailure, LockContention, etc.
+    pub component: String,      // TimeSeries, Settlement, Gateway, API, etc.
+    pub severity: String,       // critical, error, warning
+    pub incident_class: String, // DatabaseLag, TransactionFailure, LockContention, etc.
     pub runbook_name: String,
 }
 
@@ -50,7 +64,9 @@ impl Runbook {
         for action in &self.actions {
             let action_start = Instant::now();
             match action {
-                RunbookAction::AdjustCompressionPolicy { compress_after_days } => {
+                RunbookAction::AdjustCompressionPolicy {
+                    compress_after_days,
+                } => {
                     logs.push(format!(
                         "Executing action: AdjustCompressionPolicy to {} days",
                         compress_after_days
@@ -58,14 +74,21 @@ impl Runbook {
                     if let Some(manager) = global_compression_manager() {
                         let mut policy = manager.policy().clone();
                         policy.compress_after_days = *compress_after_days;
-                        policy.max_compression_lag_days = (*compress_after_days).max(policy.max_compression_lag_days);
+                        policy.max_compression_lag_days =
+                            (*compress_after_days).max(policy.max_compression_lag_days);
 
                         logs.push("Successfully adjusted compression policy in CompressionPolicyManager (simulated via thread-safe configuration update)".into());
                     } else {
-                        logs.push("CompressionPolicyManager is not initialized. Simulating success.".into());
+                        logs.push(
+                            "CompressionPolicyManager is not initialized. Simulating success."
+                                .into(),
+                        );
                     }
                 }
-                RunbookAction::ThrottleTenantRate { tenant_id, limit_per_sec } => {
+                RunbookAction::ThrottleTenantRate {
+                    tenant_id,
+                    limit_per_sec,
+                } => {
                     logs.push(format!(
                         "Executing action: ThrottleTenantRate for tenant '{}' to {} req/sec",
                         tenant_id, limit_per_sec
@@ -85,25 +108,19 @@ impl Runbook {
                         service, replicas
                     ));
                 }
-                RunbookAction::CustomWebhook { url, payload_template } => {
-                    logs.push(format!(
-                        "Executing action: CustomWebhook to URL '{}'",
-                        url
-                    ));
-                    logs.push(format!(
-                        "Webhook payload sent: {}",
-                        payload_template
-                    ));
+                RunbookAction::CustomWebhook {
+                    url,
+                    payload_template,
+                } => {
+                    logs.push(format!("Executing action: CustomWebhook to URL '{}'", url));
+                    logs.push(format!("Webhook payload sent: {}", payload_template));
                 }
                 RunbookAction::NotifySlack { channel, message } => {
                     logs.push(format!(
                         "Executing action: NotifySlack to channel '{}'",
                         channel
                     ));
-                    logs.push(format!(
-                        "Slack message sent: {}",
-                        message
-                    ));
+                    logs.push(format!("Slack message sent: {}", message));
                 }
             }
             let action_duration = action_start.elapsed().as_secs_f64();

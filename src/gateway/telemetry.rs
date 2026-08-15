@@ -18,10 +18,11 @@ use opentelemetry::{
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::{
     propagation::{BaggagePropagator, TextMapCompositePropagator, TraceContextPropagator},
-    trace::{BatchConfig, ShouldSample, TracerProvider},
+    runtime::Tokio,
+    trace::{BatchSpanProcessor, Config, ShouldSample, TracerProvider},
     Resource,
 };
-use tracing::{info, warn, Instrument, Span};
+use tracing::{info, Instrument, Span};
 use tracing_opentelemetry::OpenTelemetryLayer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::Registry;
@@ -111,25 +112,26 @@ pub fn init_open_telemetry(service_name: &str) -> anyhow::Result<()> {
     {
         Ok(exporter) => {
             // ── batch processor (5 s batch interval) ─────────────────
-            let batch = BatchConfig::default()
+            let batch = BatchSpanProcessor::builder(exporter, Tokio)
                 .with_scheduled_delay(Duration::from_secs(5))
                 .with_max_export_batch_size(512)
-                .with_max_queue_size(2048);
+                .with_max_queue_size(2048)
+                .build();
 
             // ── TracerProvider with head-based error-aware sampler ──
             // The HeadBasedErrorSampler is provided as the ShouldSample
             // implementation; it keeps 100% of error spans and 1% of
             // success spans (head-based, using trace id bits).
             let provider = TracerProvider::builder()
-                .with_batch_exporter(exporter, batch)
-                .with_sampler(Box::new(HeadBasedErrorSampler::new(0.01)))
-                .with_resource(Resource::new(vec![
-                    KeyValue::new("service.name", service_name.to_string()),
-                    KeyValue::new(
-                        "service.version",
-                        env!("CARGO_PKG_VERSION").to_string(),
-                    ),
-                ]))
+                .with_config(
+                    Config::default()
+                        .with_sampler(HeadBasedErrorSampler::new(0.01))
+                        .with_resource(Resource::new(vec![
+                            KeyValue::new("service.name", service_name.to_string()),
+                            KeyValue::new("service.version", env!("CARGO_PKG_VERSION").to_string()),
+                        ])),
+                )
+                .with_span_processor(batch)
                 .build();
 
             global::set_tracer_provider(provider);
@@ -166,8 +168,9 @@ pub fn init_tracing_otel_bridge() -> anyhow::Result<()> {
     let otel_layer = OpenTelemetryLayer::new(tracer);
 
     let subscriber = Registry::default()
-        .with(tracing_subscriber::EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| "info".into()))
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
+        )
         .with(tracing_subscriber::fmt::layer())
         .with(otel_layer);
 
@@ -216,7 +219,7 @@ impl ShouldSample for HeadBasedErrorSampler {
         // 100% sampling for spans marked as errors.
         let is_error = attributes
             .iter()
-            .any(|kv| kv.key == "error" && kv.value.as_str() == "true");
+            .any(|kv| kv.key.as_str() == "error" && kv.value.as_str() == "true");
         if is_error {
             return SamplingResult::RecordAndSample;
         }

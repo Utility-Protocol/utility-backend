@@ -1,10 +1,10 @@
+use opentelemetry::trace::TracerProvider as _;
+use opentelemetry_sdk::trace::{self as sdktrace, Sampler};
+use serde_json::Value;
 use std::io;
 use std::sync::{Arc, Mutex};
 use tracing::{info, span, Level};
-use tracing_subscriber::{layer::SubscriberExt, Registry, filter::LevelFilter};
-use serde_json::Value;
-use opentelemetry::trace::TracerProvider as _;
-use opentelemetry_sdk::trace::{self as sdktrace, Sampler};
+use tracing_subscriber::{filter::LevelFilter, layer::SubscriberExt, Registry};
 use utility_backend::tracing::logging::OtelJsonFormatter;
 
 #[derive(Clone)]
@@ -74,7 +74,11 @@ async fn test_otel_json_logging_format() {
     let output_str = String::from_utf8(output_bytes).unwrap();
     let lines: Vec<&str> = output_str.trim().split('\n').collect();
 
-    assert!(lines.len() >= 1, "Should have logged at least one message, got: {}", output_str);
+    assert!(
+        lines.len() >= 1,
+        "Should have logged at least one message, got: {}",
+        output_str
+    );
 
     // Verify first log line (span with baggage)
     let log2: Value = serde_json::from_str(lines[0]).expect("Log output is not valid JSON");

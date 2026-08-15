@@ -85,6 +85,7 @@ async fn main() -> anyhow::Result<()> {
     let breaker = Arc::new(Mutex::new(CircuitBreaker::new(5)));
     let rate_limiter = DynamicRateLimiter::new();
     let tenant_rate_limiter = TenantRateLimiter::new(1000, 1000);
+    let hlc = Arc::new(HybridLogicalClock::new());
 
     let pd_client = utility_backend::incident::PagerDutyClient::from_env();
     let incident_manager = utility_backend::incident::IncidentManager::new(pd_client);
@@ -93,9 +94,11 @@ async fn main() -> anyhow::Result<()> {
     incident_manager.register_runbook(utility_backend::incident::Runbook {
         name: "Auto-Mitigate Database Lag".to_string(),
         description: "Shortens the compression window to alleviate disk/lag issues".to_string(),
-        actions: vec![utility_backend::incident::RunbookAction::AdjustCompressionPolicy {
-            compress_after_days: 1,
-        }],
+        actions: vec![
+            utility_backend::incident::RunbookAction::AdjustCompressionPolicy {
+                compress_after_days: 1,
+            },
+        ],
     });
 
     incident_manager.register_rule(utility_backend::incident::AutomationRule {
@@ -115,6 +118,7 @@ async fn main() -> anyhow::Result<()> {
         breaker,
         rate_limiter,
         tenant_rate_limiter,
+        hlc,
     };
 
     let app = utility_backend::api::router::build_router(state).await?;

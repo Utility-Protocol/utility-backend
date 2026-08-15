@@ -109,22 +109,16 @@ pub async fn get_dlq_by_id(pool: &PgPool, id: Uuid) -> Result<Option<DlqMessage>
 
 /// Delete or resolve/acknowledge a DLQ message.
 pub async fn delete_dlq_message(pool: &PgPool, id: Uuid) -> Result<bool, sqlx::Error> {
-    let result = sqlx::query(
-        "DELETE FROM dead_letter_queue WHERE id = $1",
-    )
-    .bind(id)
-    .execute(pool)
-    .await?;
+    let result = sqlx::query("DELETE FROM dead_letter_queue WHERE id = $1")
+        .bind(id)
+        .execute(pool)
+        .await?;
 
     Ok(result.rows_affected() > 0)
 }
 
 /// Update status of a DLQ message.
-pub async fn update_dlq_status(
-    pool: &PgPool,
-    id: Uuid,
-    status: &str,
-) -> Result<bool, sqlx::Error> {
+pub async fn update_dlq_status(pool: &PgPool, id: Uuid, status: &str) -> Result<bool, sqlx::Error> {
     let result = sqlx::query(
         r#"
         UPDATE dead_letter_queue
@@ -183,7 +177,7 @@ pub async fn ensure_dlq_schema(pool: &PgPool) -> Result<(), sqlx::Error> {
             UNIQUE(queue_name, message_id)
         );
         CREATE INDEX IF NOT EXISTS idx_dlq_status ON dead_letter_queue(status);
-        "#
+        "#,
     )
     .execute(pool)
     .await?;

@@ -533,7 +533,7 @@ mod tests {
         assert!(!limiter.try_consume("abuser", 1));
 
         let status = limiter.get_status();
-        let (name, count) = status.iter().find(|(n, _)| n == "abuser").unwrap();
+        let (_, count) = status.iter().find(|(n, _)| n == "abuser").unwrap();
         assert_eq!(*count, 2);
     }
 
@@ -630,8 +630,10 @@ impl TenantRateLimiter {
     pub fn set_tenant_limit(&self, tenant_id: &str, limit: TenantLimit) {
         self.overrides.insert(tenant_id.to_string(), limit);
         // Reset the bucket so the new limit takes effect immediately.
-        self.buckets
-            .insert(tenant_id.to_string(), Arc::new(TokenBucket::new(limit.max_tokens, limit.refill_rate)));
+        self.buckets.insert(
+            tenant_id.to_string(),
+            Arc::new(TokenBucket::new(limit.max_tokens, limit.refill_rate)),
+        );
     }
 
     /// Remove a tenant override, reverting to the default limit.

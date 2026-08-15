@@ -1,4 +1,3 @@
-use crate::ingestion::tai64n::Tai64N;
 use bytes::Bytes;
 use parking_lot::Mutex;
 use serde::Serialize;
@@ -16,10 +15,10 @@ use tracing::{info, warn};
 
 use crate::gateway::hlc::{HlcTimestamp, HybridLogicalClock};
 
+#[derive(Debug, Clone)]
 pub struct MeterEvent {
     pub meter_id: String,
-    pub timestamp_tai: Tai64N,
-    pub correction_ns: i64,
+    pub timestamp: i64,
     pub reading: f64,
     pub token_volume: u64,
     pub hlc_timestamp: u64,
@@ -39,7 +38,10 @@ pub struct BackpressureFilter {
 }
 
 impl BackpressureFilter {
-    pub fn new(capacity: usize, hlc: Arc<HybridLogicalClock>) -> (Self, mpsc::Receiver<MeterEvent>) {
+    pub fn new(
+        capacity: usize,
+        hlc: Arc<HybridLogicalClock>,
+    ) -> (Self, mpsc::Receiver<MeterEvent>) {
         let (tx, rx) = mpsc::channel(capacity);
         (
             Self {
@@ -76,8 +78,7 @@ pub async fn ingest_stream(
                 let wall_clock = chrono::Utc::now().timestamp_millis();
                 let event = MeterEvent {
                     meter_id: String::from("unknown"),
-                    timestamp_tai: Tai64N::now_with_correction(0),
-                    correction_ns: 0,
+                    timestamp: wall_clock,
                     reading: 0.0,
                     token_volume: 0,
                     hlc_timestamp: 0,
