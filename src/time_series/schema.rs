@@ -4,7 +4,7 @@ use sqlx::{FromRow, PgPool};
 
 /// TimescaleDB chunk metadata used by cooperative compaction.
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
-pub struct CompressableChunk {
+pub struct CompressibleChunk {
     pub chunk_name: String,
     pub chunk_schema: String,
     pub range_start: DateTime<Utc>,
@@ -13,13 +13,13 @@ pub struct CompressableChunk {
 }
 
 /// Lists uncompressed chunks ending before `before`, oldest first.
-pub async fn list_compressable_chunks(
+pub async fn list_compressible_chunks(
     pool: &PgPool,
     hypertable_name: &str,
     before: DateTime<Utc>,
     limit: u32,
-) -> Result<Vec<CompressableChunk>, sqlx::Error> {
-    sqlx::query_as::<_, CompressableChunk>(
+) -> Result<Vec<CompressibleChunk>, sqlx::Error> {
+    sqlx::query_as::<_, CompressibleChunk>(
         "SELECT \
             chunk_name::text, \
             chunk_schema::text, \

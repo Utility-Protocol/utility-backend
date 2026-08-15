@@ -1,6 +1,6 @@
 use crate::api::metrics;
 use crate::time_series::pool::AdvisoryLockMode;
-use crate::time_series::schema::{list_compressable_chunks, CompressableChunk};
+use crate::time_series::schema::{list_compressible_chunks, CompressibleChunk};
 use chrono::{Duration as ChronoDuration, Utc};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
@@ -66,7 +66,7 @@ impl CompactionOrchestrator {
 
     pub async fn run_once(&self) -> anyhow::Result<()> {
         let before = Utc::now() - ChronoDuration::hours(self.config.min_age_hours);
-        let chunks = list_compressable_chunks(
+        let chunks = list_compressible_chunks(
             &self.pool,
             &self.config.hypertable_name,
             before,
@@ -88,7 +88,7 @@ impl CompactionOrchestrator {
         Ok(())
     }
 
-    async fn compact_chunk(&self, chunk: CompressableChunk) -> anyhow::Result<()> {
+    async fn compact_chunk(&self, chunk: CompressibleChunk) -> anyhow::Result<()> {
         metrics::record_compaction_attempt();
         let lock_timeout = Duration::from_millis(500);
         let max_duration = Duration::from_secs(self.config.max_compaction_duration_s);

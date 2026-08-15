@@ -185,9 +185,7 @@ where
         let mut attempt = 0;
         let started = std::time::Instant::now();
 
-        let mut last_transient_error: Option<String>;
-
-        loop {
+        let error_msg = loop {
             attempt += 1;
             let result = timeout(
                 self.deadline,
@@ -214,11 +212,10 @@ where
                 // Exhausted retries on a retryable status
                 Ok(Ok(status)) if attempt >= self.retry.max_attempts => {
                     metrics::record_webhook_delivery(&endpoint.id, "failed");
-                    last_transient_error = Some(format!(
+                    break format!(
                         "retryable status {} persisted after {} attempts",
                         status, attempt
-                    ));
-                    break;
+                    );
                 }
                 // Still have retries left for a retryable status
                 Ok(Ok(_)) => {
@@ -232,8 +229,7 @@ where
                         sleep(self.retry.delay_for(attempt)).await;
                     } else {
                         metrics::record_webhook_delivery(&endpoint.id, "failed");
-                        last_transient_error = Some(msg);
-                        break;
+                        break msg;
                     }
                 }
                 // Timeout
@@ -243,8 +239,7 @@ where
                         sleep(self.retry.delay_for(attempt)).await;
                     } else {
                         metrics::record_webhook_delivery(&endpoint.id, "failed");
-                        last_transient_error = Some("delivery timed out after max attempts".into());
-                        break;
+                        break "delivery timed out after max attempts".to_string();
                     }
                 }
                 // Non-recoverable error (e.g. serialization) — bail immediately
@@ -253,10 +248,9 @@ where
                     return Err(err);
                 }
             }
-        }
+        };
 
         // All retries exhausted — move to dead-letter queue.
-        let error_msg = last_transient_error.unwrap_or_else(|| "unknown delivery failure".into());
         if let Some(ref dlq) = self.dlq {
             let _ = dlq
                 .enqueue(

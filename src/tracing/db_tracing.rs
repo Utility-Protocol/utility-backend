@@ -57,7 +57,7 @@ pub fn start_query_span(operation: &str, table: Option<&str>) -> QuerySpanGuard 
         db.sql.table = table.unwrap_or(""),
         otel.kind = "client",
     );
-    let entered = span.entered();
+    let entered = span.clone().entered();
     QuerySpanGuard {
         span,
         entered: Some(entered),

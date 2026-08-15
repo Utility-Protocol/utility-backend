@@ -719,7 +719,7 @@ pub fn inc_job_scheduler_enqueued() {
 }
 
 pub fn inc_job_scheduler_claimed(count: u64) {
-    JOB_SCHEDULER_CLAIMED.inc_by(count);
+    JOB_SCHEDULER_CLAIMED.inc_by(count as f64);
 }
 
 pub fn inc_job_scheduler_heartbeat() {

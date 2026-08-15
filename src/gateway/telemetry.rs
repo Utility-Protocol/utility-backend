@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use axum::{
@@ -12,14 +13,17 @@ use opentelemetry::{
     baggage::BaggageExt,
     global,
     propagation::Extractor,
-    trace::{SamplingResult, SpanKind, TraceContextExt},
+    trace::{
+        SamplingDecision, SamplingResult, SpanKind, TraceContextExt, TraceState,
+        TracerProvider as _,
+    },
     Context, KeyValue,
 };
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::{
     propagation::{BaggagePropagator, TextMapCompositePropagator, TraceContextPropagator},
     runtime::Tokio,
-    trace::{BatchSpanProcessor, Config, ShouldSample, TracerProvider},
+    trace::{BatchSpanProcessor, Config, ShouldSample, Tracer, TracerProvider},
     Resource,
 };
 use tracing::{info, Instrument, Span};
@@ -74,6 +78,12 @@ impl SpatialTraceSampler {
         trace_id <= threshold
     }
 }
+
+/// SDK tracer produced by [`init_open_telemetry`], consumed by
+/// [`init_tracing_otel_bridge`] so the tracing layer can export spans through
+/// the OTLP pipeline (global `BoxedTracer` cannot satisfy
+/// `PreSampledTracer`).
+static SDK_TRACER: OnceLock<Tracer> = OnceLock::new();
 
 /// Initializes the OpenTelemetry propagators only (safe to call in tests).
 ///
@@ -134,6 +144,8 @@ pub fn init_open_telemetry(service_name: &str) -> anyhow::Result<()> {
                 .with_span_processor(batch)
                 .build();
 
+            let tracer = provider.tracer(service_name);
+            let _ = SDK_TRACER.set(tracer.clone());
             global::set_tracer_provider(provider);
 
             info!(
@@ -164,7 +176,15 @@ pub fn init_open_telemetry(service_name: &str) -> anyhow::Result<()> {
 /// `tracing_subscriber` registry so that `tracing` spans are exported
 /// as OpenTelemetry spans through the configured TracerProvider.
 pub fn init_tracing_otel_bridge() -> anyhow::Result<()> {
-    let tracer = global::tracer("utility-backend");
+    let tracer = match SDK_TRACER.get() {
+        Some(tracer) => tracer.clone(),
+        None => {
+            let provider = TracerProvider::builder()
+                .with_config(Config::default().with_sampler(HeadBasedErrorSampler::new(0.01)))
+                .build();
+            provider.tracer("utility-backend")
+        }
+    };
     let otel_layer = OpenTelemetryLayer::new(tracer);
 
     let subscriber = Registry::default()
@@ -212,7 +232,7 @@ impl ShouldSample for HeadBasedErrorSampler {
         // Always sample if a parent already decided to sample.
         if let Some(parent) = parent_context {
             if parent.span().span_context().is_sampled() {
-                return SamplingResult::RecordAndSample;
+                return decision(SamplingDecision::RecordAndSample);
             }
         }
 
@@ -221,7 +241,7 @@ impl ShouldSample for HeadBasedErrorSampler {
             .iter()
             .any(|kv| kv.key.as_str() == "error" && kv.value.as_str() == "true");
         if is_error {
-            return SamplingResult::RecordAndSample;
+            return decision(SamplingDecision::RecordAndSample);
         }
 
         // Head-based probability sampling using the high-64 bits of the
@@ -233,10 +253,18 @@ impl ShouldSample for HeadBasedErrorSampler {
             .unwrap_or(0);
 
         if decision <= threshold {
-            SamplingResult::RecordAndSample
+            decision(SamplingDecision::RecordAndSample)
         } else {
-            SamplingResult::Drop
+            decision(SamplingDecision::Drop)
         }
+    }
+}
+
+fn decision(decision: SamplingDecision) -> SamplingResult {
+    SamplingResult {
+        decision,
+        attributes: Vec::new(),
+        trace_state: TraceState::default(),
     }
 }
 

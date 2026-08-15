@@ -105,7 +105,7 @@ pub fn start_producer_span(
     partition: i32,
 ) -> (HashMap<String, String>, tracing::Span) {
     let tracer = global::tracer("kafka-producer");
-    let mut span = tracer
+    let span = tracer
         .span_builder(format!("kafka.produce {}", topic))
         .with_kind(opentelemetry::trace::SpanKind::Producer)
         .with_attributes(vec![
