@@ -144,7 +144,7 @@ pub fn init_open_telemetry(service_name: &str) -> anyhow::Result<()> {
                 .with_span_processor(batch)
                 .build();
 
-            let tracer = provider.tracer(service_name);
+            let tracer = provider.tracer(service_name.to_string());
             let _ = SDK_TRACER.set(tracer.clone());
             global::set_tracer_provider(provider);
 
@@ -232,7 +232,7 @@ impl ShouldSample for HeadBasedErrorSampler {
         // Always sample if a parent already decided to sample.
         if let Some(parent) = parent_context {
             if parent.span().span_context().is_sampled() {
-                return decision(SamplingDecision::RecordAndSample);
+                return sampling_result(SamplingDecision::RecordAndSample);
             }
         }
 
@@ -241,7 +241,7 @@ impl ShouldSample for HeadBasedErrorSampler {
             .iter()
             .any(|kv| kv.key.as_str() == "error" && kv.value.as_str() == "true");
         if is_error {
-            return decision(SamplingDecision::RecordAndSample);
+            return sampling_result(SamplingDecision::RecordAndSample);
         }
 
         // Head-based probability sampling using the high-64 bits of the
@@ -253,14 +253,14 @@ impl ShouldSample for HeadBasedErrorSampler {
             .unwrap_or(0);
 
         if decision <= threshold {
-            decision(SamplingDecision::RecordAndSample)
+            sampling_result(SamplingDecision::RecordAndSample)
         } else {
-            decision(SamplingDecision::Drop)
+            sampling_result(SamplingDecision::Drop)
         }
     }
 }
 
-fn decision(decision: SamplingDecision) -> SamplingResult {
+fn sampling_result(decision: SamplingDecision) -> SamplingResult {
     SamplingResult {
         decision,
         attributes: Vec::new(),
