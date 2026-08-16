@@ -613,6 +613,18 @@ lazy_static! {
         &["outcome"]
     )
     .unwrap();
+    pub static ref SECRET_ROTATIONS: CounterVec = register_counter_vec!(
+        "utility_secret_rotations_total",
+        "Secret rotation events by secret name and outcome",
+        &["name", "outcome"]
+    )
+    .unwrap();
+    pub static ref SECRET_ROTATION_DURATION_MS: HistogramVec = register_histogram_vec!(
+        "utility_secret_rotation_duration_ms",
+        "Secret rotation duration in milliseconds by outcome",
+        &["outcome"]
+    )
+    .unwrap();
     pub static ref JOB_SCHEDULER_ENQUEUED: Counter = register_counter!(
         "utility_job_scheduler_enqueued_total",
         "Total jobs enqueued by the job scheduler"
@@ -712,6 +724,13 @@ pub fn record_backup_verification_failure(duration_seconds: f64) {
     BACKUP_VERIFICATION_DURATION_SECONDS
         .with_label_values(&["failure"])
         .observe(duration_seconds);
+}
+
+pub fn record_secret_rotation(name: &str, outcome: &str, duration_ms: f64) {
+    SECRET_ROTATIONS.with_label_values(&[name, outcome]).inc();
+    SECRET_ROTATION_DURATION_MS
+        .with_label_values(&[outcome])
+        .observe(duration_ms);
 }
 
 pub fn inc_job_scheduler_enqueued() {

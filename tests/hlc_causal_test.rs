@@ -20,12 +20,6 @@ async fn test_causal_delivery_preserved() {
     let hlc1 = Arc::new(HybridLogicalClock::new());
     let hlc2 = Arc::new(HybridLogicalClock::new());
 
-    let (ordered_tx, mut ordered_rx) = mpsc::channel(100);
-
-    // Collector 2's causal orderer (the merging point)
-    let orderer = CausalOrderer::new(ordered_tx, hlc2.clone());
-    orderer.spawn();
-
     // Simulate meter M sending two events with the same wall-clock time
     let wall_clock_ms = 1000u64;
 
@@ -56,12 +50,8 @@ async fn test_causal_delivery_preserved() {
     let hlc_b = hlc2.tick(wall_clock_ms);
     event_b.hlc_timestamp = hlc_b.0;
 
-    // Simulated delay: first push B to orderer (A is in transit)
-    // We need to push events into orderer. Since CausalOrderer is not shared
-    // (it runs in its own task via spawn), we can't push directly.
-    // Instead, let's test the ordering property by pushing to the buffer directly.
-    drop(orderer);
-    drop(hlc2);
+    // The spawned orderer runs in its own task; test the ordering property
+    // synchronously by pushing into a local buffer instead.
 
     // Now re-create the scenario using a synchronous approach
     let hlc = Arc::new(HybridLogicalClock::new());

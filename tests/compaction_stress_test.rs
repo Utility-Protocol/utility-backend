@@ -30,7 +30,8 @@ async fn compaction_leases_do_not_fail_concurrent_writes() -> anyhow::Result<()>
         writes.push(tokio::spawn(async move {
             for i in 0..25_000 {
                 let recorded_at = now + Duration::hours((i % 4) as i64);
-                ingest_telemetry(&pool, &format!("stress-{writer}"), i as f64, recorded_at).await?;
+                ingest_telemetry(&pool, &format!("stress-{writer}"), i as f64, recorded_at, 0)
+                    .await?;
             }
             anyhow::Ok(())
         }));

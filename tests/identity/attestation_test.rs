@@ -45,7 +45,8 @@ async fn test_attestation_and_signature_flow() -> anyhow::Result<()> {
             let mut nonce = [0u8; 32];
             stream.read_exact(&mut nonce).await.unwrap();
 
-            let signing_key = SigningKey::random(&mut rand::thread_rng());
+            let scalar: p256::FieldBytes = [1u8; 32].into();
+            let signing_key = SigningKey::from_bytes(&scalar).unwrap();
             let verifying_key = signing_key.verifying_key();
             let pk_bytes = verifying_key.to_sec1_bytes();
 

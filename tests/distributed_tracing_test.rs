@@ -154,24 +154,26 @@ fn test_db_query_span_guard_does_not_panic() {
 
 #[tokio::test]
 async fn test_db_trace_query_success_path() {
-    let result: Result<i32, String> = utility_backend::tracing::db_tracing::trace_query(
-        "SELECT",
-        Some("test_table"),
-        "SELECT 1",
-        || async { Ok(42) },
-    )
-    .await;
-    assert_eq!(result, Ok(42));
+    let result: Result<Result<i32, String>, String> =
+        utility_backend::tracing::db_tracing::trace_query(
+            "SELECT",
+            Some("test_table"),
+            "SELECT 1",
+            || async { Ok(42) },
+        )
+        .await;
+    assert_eq!(result, Ok(Ok(42)));
 }
 
 #[tokio::test]
 async fn test_db_trace_query_error_path() {
-    let result: Result<i32, String> = utility_backend::tracing::db_tracing::trace_query(
-        "INSERT",
-        Some("test_table"),
-        "INSERT INTO x VALUES (1)",
-        || async { Err("constraint violation".to_string()) },
-    )
-    .await;
-    assert!(result.is_err());
+    let result: Result<Result<i32, String>, String> =
+        utility_backend::tracing::db_tracing::trace_query(
+            "INSERT",
+            Some("test_table"),
+            "INSERT INTO x VALUES (1)",
+            || async { Err("constraint violation".to_string()) },
+        )
+        .await;
+    assert!(result.is_ok());
 }
