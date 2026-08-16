@@ -19,7 +19,9 @@ pub struct PartitionLag {
 
 impl PartitionLag {
     pub fn lag(&self) -> u64 {
-        self.high_watermark.saturating_sub(self.current_offset) as u64
+        self.high_watermark
+            .saturating_sub(self.current_offset)
+            .max(0) as u64
     }
 }
 
