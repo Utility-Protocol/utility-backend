@@ -73,6 +73,7 @@ pub fn payload_hash<T: Serialize>(payload: &T) -> Result<String, serde_json::Err
     Ok(hex::encode(hasher.finalize()))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn compute_event_hash(
     sequence: u64,
     occurred_at: DateTime<Utc>,
@@ -108,10 +109,10 @@ pub fn compute_event_hash(
 
 pub fn verify_hash_chain(events: &[AuditEvent]) -> AuditVerificationReport {
     let mut previous_hash = GENESIS_PREVIOUS_HASH.to_string();
-    let mut expected_sequence = events.first().map(|e| e.sequence).unwrap_or(1);
+    let first_sequence = events.first().map(|e| e.sequence).unwrap_or(1);
 
-    for event in events {
-        if event.sequence != expected_sequence {
+    for (index, event) in events.iter().enumerate() {
+        if event.sequence != first_sequence + index as u64 {
             metrics::record_audit_verification_failure("sequence_gap");
             return invalid(events, event.sequence, "non-contiguous audit sequence");
         }
@@ -142,7 +143,6 @@ pub fn verify_hash_chain(events: &[AuditEvent]) -> AuditVerificationReport {
             );
         }
         previous_hash = event.hash.clone();
-        expected_sequence += 1;
     }
 
     metrics::record_audit_verification(events.len() as u64);

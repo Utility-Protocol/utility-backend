@@ -43,10 +43,8 @@ impl HlcWatermarkStore {
         let mut store = self.store.write().expect("watermark store lock poisoned");
         for (source, other_wm) in other {
             let entry = store.entry(source.clone()).or_insert(*other_wm);
-            if other_wm.last_hlc > entry.last_hlc {
-                *entry = *other_wm;
-            } else if other_wm.last_hlc == entry.last_hlc
-                && other_wm.last_offset > entry.last_offset
+            if other_wm.last_hlc > entry.last_hlc
+                || (other_wm.last_hlc == entry.last_hlc && other_wm.last_offset > entry.last_offset)
             {
                 *entry = *other_wm;
             }

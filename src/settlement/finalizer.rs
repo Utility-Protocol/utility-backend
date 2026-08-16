@@ -116,7 +116,7 @@ impl Finalizer {
                     "mint-events",
                     &msg_id_str,
                     &dlq_payload,
-                    Some(&e.to_string()),
+                    Some(e),
                 )
                 .await
                 {

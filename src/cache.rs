@@ -90,6 +90,10 @@ impl InMemoryCacheStore {
         self.entries.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     fn evict_expired(&self) {
         let now = Instant::now();
         self.entries.retain(|_, entry| entry.expires_at > now);
@@ -206,7 +210,7 @@ impl CacheStore for RedisCacheStore {
 
     async fn delete(&self, key: &str) -> Result<(), CacheError> {
         match self.command(&[b"DEL", key.as_bytes()]).await? {
-            RedisReply::Integer(_) => Ok(()),
+            RedisReply::Integer => Ok(()),
             other => Err(CacheError::RedisProtocol(format!(
                 "unexpected DEL reply: {other:?}"
             ))),
@@ -218,7 +222,7 @@ impl CacheStore for RedisCacheStore {
 enum RedisReply {
     Simple(String),
     Bulk(Option<Vec<u8>>),
-    Integer(i64),
+    Integer,
 }
 
 fn parse_redis_address(redis_url: &str) -> Result<String, CacheError> {
@@ -244,9 +248,12 @@ fn parse_redis_reply(buf: &[u8]) -> Result<RedisReply, CacheError> {
     }
     match buf[0] {
         b'+' => Ok(RedisReply::Simple(read_line(&buf[1..])?)),
-        b':' => Ok(RedisReply::Integer(read_line(&buf[1..])?.parse().map_err(
-            |_| CacheError::RedisProtocol("invalid integer reply".to_string()),
-        )?)),
+        b':' => {
+            let _ = read_line(&buf[1..])?
+                .parse::<i64>()
+                .map_err(|e| CacheError::RedisProtocol(format!("invalid integer reply: {e}")))?;
+            Ok(RedisReply::Integer)
+        }
         b'$' => {
             let line = read_line(&buf[1..])?;
             let len: isize = line

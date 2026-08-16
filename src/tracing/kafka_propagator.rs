@@ -134,7 +134,7 @@ mod tests {
         use opentelemetry_sdk::propagation::{
             BaggagePropagator, TextMapCompositePropagator, TraceContextPropagator,
         };
-        let _ = global::set_text_map_propagator(TextMapCompositePropagator::new(vec![
+        global::set_text_map_propagator(TextMapCompositePropagator::new(vec![
             Box::new(TraceContextPropagator::new()),
             Box::new(BaggagePropagator::new()),
         ]));
