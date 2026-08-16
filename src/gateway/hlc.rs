@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
 const PHYSICAL_BITS: u64 = 48;
-const LOGICAL_MASK: u64 = 0xFFFF;
+const PHYSICAL_MASK: u64 = (1 << PHYSICAL_BITS) - 1;
 const MAX_LOGICAL: u16 = 0xFFFF;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -9,15 +9,15 @@ pub struct HlcTimestamp(pub u64);
 
 impl HlcTimestamp {
     pub fn physical(self) -> u64 {
-        self.0 >> PHYSICAL_BITS
+        self.0 & PHYSICAL_MASK
     }
 
     pub fn logical(self) -> u16 {
-        (self.0 & LOGICAL_MASK) as u16
+        (self.0 >> PHYSICAL_BITS) as u16
     }
 
     pub fn new(physical: u64, logical: u16) -> Self {
-        HlcTimestamp((physical << PHYSICAL_BITS) | (logical as u64))
+        HlcTimestamp(physical | ((logical as u64) << PHYSICAL_BITS))
     }
 }
 
@@ -50,8 +50,8 @@ impl HybridLogicalClock {
     pub fn tick(&self, wall_clock_ms: u64) -> HlcTimestamp {
         loop {
             let old = self.current.load(Ordering::Acquire);
-            let old_physical = old >> PHYSICAL_BITS;
-            let old_logical = (old & LOGICAL_MASK) as u16;
+            let old_physical = old & PHYSICAL_MASK;
+            let old_logical = (old >> PHYSICAL_BITS) as u16;
 
             let candidate_physical = old_physical.max(wall_clock_ms);
             let new_logical = if candidate_physical == old_physical {
@@ -69,7 +69,7 @@ impl HybridLogicalClock {
                 (candidate_physical, new_logical)
             };
 
-            let new_val = (candidate_physical << PHYSICAL_BITS) | (new_logical as u64);
+            let new_val = candidate_physical | ((new_logical as u64) << PHYSICAL_BITS);
             if self
                 .current
                 .compare_exchange(old, new_val, Ordering::SeqCst, Ordering::Relaxed)
@@ -83,7 +83,11 @@ impl HybridLogicalClock {
     pub fn update(&self, incoming: HlcTimestamp) {
         loop {
             let old = self.current.load(Ordering::Acquire);
-            let new_val = old.max(incoming.0);
+            let new_val = if HlcTimestamp(old) >= incoming {
+                old
+            } else {
+                incoming.0
+            };
             if self
                 .current
                 .compare_exchange(old, new_val, Ordering::SeqCst, Ordering::Relaxed)

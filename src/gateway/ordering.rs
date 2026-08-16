@@ -66,11 +66,15 @@ impl CausalOrderer {
     }
 
     pub fn push(&mut self, mut event: MeterEvent) {
-        if event.hlc_timestamp != 0 {
-            self.hlc.update(event.hlc());
-        }
-        let hlc_ts = self.hlc.tick(event.timestamp as u64);
-        event.hlc_timestamp = hlc_ts.0;
+        let hlc_ts = if event.hlc_timestamp != 0 {
+            let ts = event.hlc();
+            self.hlc.update(ts);
+            ts
+        } else {
+            let ts = self.hlc.tick(event.timestamp as u64);
+            event.hlc_timestamp = ts.0;
+            ts
+        };
         let ordered = OrderedEvent { hlc: hlc_ts, event };
         let source = self.source_id(&ordered);
         self.buffer.entry(source).or_default().push(ordered);
@@ -87,7 +91,12 @@ impl CausalOrderer {
                 None => continue,
             };
             while let Some(top) = heap.peek() {
-                if top.hlc.physical() <= cutoff {
+                let event_wall = top.event.timestamp as u64;
+                // An event is ready once it has aged past the skew window:
+                // either its assigned HLC is old enough, or its original
+                // wall-clock timestamp marks it as a straggler that was
+                // re-stamped at the current time on arrival.
+                if top.hlc.physical() <= cutoff || event_wall <= cutoff {
                     ready.push(heap.pop().unwrap().event);
                 } else {
                     break;

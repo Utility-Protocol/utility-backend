@@ -8,66 +8,48 @@ use utility_backend::gateway::watermark::HlcWatermarkStore;
 
 /// Simulates the classic "causal delivery" scenario:
 ///
-/// Collector 1 receives event A (seq 1, wall-clock T), forwards it to
-/// collector 2 with a simulated delay. Collector 2 receives event B
-/// (seq 2, wall-clock T) directly from the meter first.
-///
-/// HLC must ensure the output stream delivers A before B because A
-/// causally precedes B, even though both have the same wall-clock time.
+/// Event A causally precedes event B: both carry the same wall-clock time,
+/// but B's HLC has a higher logical component.  B arrives at the orderer
+/// first, yet the output stream must deliver A before B.
 #[tokio::test]
 async fn test_causal_delivery_preserved() {
-    // Two collectors, each with their own HLC
-    let hlc1 = Arc::new(HybridLogicalClock::new());
-    let hlc2 = Arc::new(HybridLogicalClock::new());
-
-    // Simulate meter M sending two events with the same wall-clock time
-    let wall_clock_ms = 1000u64;
-
-    // Event A: arrives at collector 1 first
-    let mut event_a = MeterEvent {
-        meter_id: "MTR-CAUSAL".into(),
-        timestamp: wall_clock_ms as i64,
-        reading: 100.0,
-        token_volume: 50,
-        hlc_timestamp: 0,
-    };
-
-    // Collector 1 ticks and assigns HLC to event A
-    let hlc_a = hlc1.tick(wall_clock_ms);
-    event_a.hlc_timestamp = hlc_a.0;
-
-    // Simulate a network delay: event A is forwarded to collector 2 after B arrives
-    // Event B arrives at collector 2 directly from meter (same wall clock)
-    let mut event_b = MeterEvent {
-        meter_id: "MTR-CAUSAL".into(),
-        timestamp: wall_clock_ms as i64,
-        reading: 200.0,
-        token_volume: 100,
-        hlc_timestamp: 0,
-    };
-
-    // Collector 2 ticks for B (causally after A, but A hasn't arrived yet)
-    let hlc_b = hlc2.tick(wall_clock_ms);
-    event_b.hlc_timestamp = hlc_b.0;
-
-    // The spawned orderer runs in its own task; test the ordering property
-    // synchronously by pushing into a local buffer instead.
-
-    // Now re-create the scenario using a synchronous approach
     let hlc = Arc::new(HybridLogicalClock::new());
     let (tx, _rx) = mpsc::channel(100);
     let mut sync_orderer = CausalOrderer::new(tx, hlc.clone());
 
-    // Push events in reverse causal order (B first, then A)
+    // A is causally first: ticked before B at the same wall-clock time.
+    let ts_a = hlc.tick(1000); // (1000, logical 0)
+    let ts_b = hlc.tick(1000); // (1000, logical 1)
+
+    let event_a = MeterEvent {
+        meter_id: "MTR-CAUSAL".into(),
+        timestamp: 1000,
+        reading: 100.0,
+        token_volume: 50,
+        hlc_timestamp: ts_a.0,
+    };
+    let event_b = MeterEvent {
+        meter_id: "MTR-CAUSAL".into(),
+        timestamp: 1000,
+        reading: 200.0,
+        token_volume: 100,
+        hlc_timestamp: ts_b.0,
+    };
+
+    // Push events in reverse causal order (B first, then A).
     sync_orderer.push(event_b.clone());
     sync_orderer.push(event_a.clone());
 
+    // Both events sit at the current HLC time, so nothing is ready yet.
+    assert!(
+        sync_orderer.flush_ready().is_empty(),
+        "events at the current HLC time should be held within the skew window"
+    );
+
+    // Once the clock advances past the skew window, A (the causally-earlier
+    // event, smaller HLC) must be emitted before B.
+    hlc.tick(2000);
     let ready = sync_orderer.flush_ready();
-    // Since both events are at the same wall-clock time,
-    // and hlc_a has logical=0, hlc_b has logical=1 (bc it ticked second),
-    // the orderer should emit A before B because A has a smaller HLC.
-    // But wait - B was pushed first into the heap, and A has the smaller HLC.
-    // The heap should pop A first.
     assert_eq!(ready.len(), 2, "both events should be ready");
     assert_eq!(
         ready[0].reading, 100.0,
