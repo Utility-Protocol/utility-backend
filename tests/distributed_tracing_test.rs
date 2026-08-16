@@ -20,8 +20,8 @@ use utility_backend::tracing::kafka_propagator::{
 
 // ── OTLP Exporter & TracerProvider ──────────────────────────────────
 
-#[test]
-fn test_otel_pipeline_initializes_without_panicking() {
+#[tokio::test]
+async fn test_otel_pipeline_initializes_without_panicking() {
     // init_open_telemetry may fail if no collector is reachable, but it
     // must never panic.  We tolerate Err because there is no OTLP receiver
     // in CI.
@@ -36,8 +36,8 @@ fn test_otel_pipeline_initializes_without_panicking() {
 
 // ── W3C Trace Context & Spatial Baggage Propagation ─────────────────
 
-#[test]
-fn test_w3c_traceparent_and_baggage_roundtrip() {
+#[tokio::test]
+async fn test_w3c_traceparent_and_baggage_roundtrip() {
     // Use init_open_telemetry to set up propagators (may fail in CI).
     let _ = init_open_telemetry("baggage-test");
 
@@ -83,8 +83,8 @@ fn test_w3c_traceparent_and_baggage_roundtrip() {
 
 // ── Kafka Message Header Propagation ────────────────────────────────
 
-#[test]
-fn test_kafka_headers_inject_extract_roundtrip() {
+#[tokio::test]
+async fn test_kafka_headers_inject_extract_roundtrip() {
     let _ = init_open_telemetry("kafka-test");
 
     let trace_id = TraceId::from_hex("4bf92f3577b34da6a3ce929d0e0e4736").unwrap();
@@ -114,8 +114,8 @@ fn test_kafka_headers_inject_extract_roundtrip() {
     );
 }
 
-#[test]
-fn test_kafka_headers_empty_input_produces_empty_context() {
+#[tokio::test]
+async fn test_kafka_headers_empty_input_produces_empty_context() {
     let _ = init_open_telemetry("kafka-empty-test");
     let empty: HashMap<String, String> = HashMap::new();
     let cx = extract_from_kafka_headers(&empty);
