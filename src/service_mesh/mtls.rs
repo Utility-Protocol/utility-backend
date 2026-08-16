@@ -1,13 +1,11 @@
 use std::sync::Arc;
 use std::{fs, path::Path};
 
-use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::{ClientConfig, RootCertStore, ServerConfig};
 use thiserror::Error;
 use tokio_rustls::TlsAcceptor;
-use tracing::{info, warn};
-
-use super::MeshIdentity;
+use tracing::info;
 
 #[derive(Debug, Error)]
 pub enum MtlsError {
@@ -118,21 +116,21 @@ pub fn build_server_tls_config(config: &MtlsConfig) -> Result<Option<TlsAcceptor
     let key = load_private_key(&config.key_path)?;
     let root_store = load_ca_certs(&config.ca_cert_path)?;
 
-    let mut server_config = ServerConfig::builder()
-        .with_no_client_auth()
-        .with_single_cert(certs.clone(), key.clone())
-        .map_err(|e| MtlsError::ServerConfigError(e.to_string()))?;
-
-    if config.require_client_cert {
-        server_config = ServerConfig::builder()
+    let server_config = if config.require_client_cert {
+        ServerConfig::builder()
             .with_client_cert_verifier(
                 rustls::server::WebPkiClientVerifier::builder(Arc::new(root_store))
                     .build()
                     .map_err(|e| MtlsError::ServerConfigError(e.to_string()))?,
             )
             .with_single_cert(certs, key)
-            .map_err(|e| MtlsError::ServerConfigError(e.to_string()))?;
-    }
+            .map_err(|e| MtlsError::ServerConfigError(e.to_string()))?
+    } else {
+        ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(certs, key)
+            .map_err(|e| MtlsError::ServerConfigError(e.to_string()))?
+    };
 
     let acceptor = TlsAcceptor::from(Arc::new(server_config));
     info!("mTLS server configured with SPIFFE trust domain");
@@ -152,7 +150,7 @@ pub fn build_client_tls_config(
         .with_root_certificates(root_store)
         .with_no_client_auth();
 
-    let mut client_config =
+    let client_config =
         if Path::new(&config.cert_path).exists() && Path::new(&config.key_path).exists() {
             let certs = load_certs(&config.cert_path)?;
             let key = load_private_key(&config.key_path)?;

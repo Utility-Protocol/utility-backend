@@ -3,10 +3,9 @@ use std::sync::Arc;
 use reqwest::Client as HttpClient;
 use thiserror::Error;
 use tokio::sync::RwLock;
-use tracing::{info, warn};
 use url::Url;
 
-use super::mtls::{build_client_tls_config, verify_peer_spiffe_id, MtlsConfig};
+use super::mtls::{build_client_tls_config, MtlsConfig};
 use super::{MeshIdentity, ServiceMeshMtlsConfig};
 
 #[derive(Debug, Clone)]
