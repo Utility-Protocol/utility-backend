@@ -9,7 +9,7 @@ const DEFAULT_CRITICAL_PATH_BUDGET_MS: u64 = 100;
 const DEFAULT_CANARY_MIN_SUCCESS_RATE: f64 = 0.9999;
 const DEFAULT_CANARY_MAX_P99_MS: u64 = 100;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ServiceMeshMtlsConfig {
     pub enabled: bool,
     pub service_name: String,

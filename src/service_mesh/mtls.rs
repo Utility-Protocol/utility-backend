@@ -74,11 +74,8 @@ fn load_certs(path: &str) -> Result<Vec<CertificateDer<'static>>, MtlsError> {
 
 fn load_private_key(path: &str) -> Result<PrivateKeyDer<'static>, MtlsError> {
     let data = fs::read(path).map_err(|e| MtlsError::KeyReadError(format!("{}: {}", path, e)))?;
-    let keys = rustls_pemfile::private_keys(&mut data.as_slice())
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| MtlsError::KeyParseError(format!("{}: {}", path, e)))?;
-    keys.into_iter()
-        .next()
+    rustls_pemfile::private_key(&mut data.as_slice())
+        .map_err(|e| MtlsError::KeyParseError(format!("{}: {}", path, e)))?
         .ok_or_else(|| MtlsError::KeyNotFound(path.to_string()))
 }
 
@@ -98,21 +95,13 @@ fn load_ca_certs(path: &str) -> Result<RootCertStore, MtlsError> {
 
 pub fn extract_spiffe_id(cert: &CertificateDer<'_>) -> Option<String> {
     use x509_parser::prelude::*;
-    let (_rem, parsed) = X509Certificate::from_der(cert).ok()?;
+    let (_rem, parsed) = X509Certificate::from_der(cert.as_ref()).ok()?;
     for ext in parsed.extensions() {
-        if ext.value.identifier().to_string() == "2.5.29.17" {
-            // subjectAltName
-            if let Ok(GeneralNames::Sequence(names)) =
-                x509_parser::extensions::GeneralNames::from_der(ext.value.data())
-            {
-                for name in &names.0 {
-                    if let x509_parser::extensions::GeneralName::UniformResourceIdentifier(uri) =
-                        name
-                    {
-                        let s = uri.as_str();
-                        if s.starts_with("spiffe://") {
-                            return Some(s.to_string());
-                        }
+        if let ParsedExtension::SubjectAlternativeName(san) = ext.parsed_extension() {
+            for name in &san.general_names {
+                if let GeneralName::URI(uri) = name {
+                    if uri.starts_with("spiffe://") {
+                        return Some(uri.to_string());
                     }
                 }
             }
@@ -131,13 +120,13 @@ pub fn build_server_tls_config(config: &MtlsConfig) -> Result<Option<TlsAcceptor
 
     let mut server_config = ServerConfig::builder()
         .with_no_client_auth()
-        .with_single_cert(certs.clone(), key)
+        .with_single_cert(certs.clone(), key.clone())
         .map_err(|e| MtlsError::ServerConfigError(e.to_string()))?;
 
     if config.require_client_cert {
         server_config = ServerConfig::builder()
             .with_client_cert_verifier(
-                rustls::server::WebPkiClientVerifier::builder(root_store)
+                rustls::server::WebPkiClientVerifier::builder(Arc::new(root_store))
                     .build()
                     .map_err(|e| MtlsError::ServerConfigError(e.to_string()))?,
             )

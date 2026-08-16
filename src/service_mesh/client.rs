@@ -100,7 +100,7 @@ impl ServiceMeshClient {
                             "utility-mesh-client/{}",
                             mtls_config.service_name
                         ))
-                        .unwrap_or_default(),
+                        .expect("static user-agent header value"),
                     );
                     HttpClient::builder()
                         .use_preconfigured_tls(cfg)
