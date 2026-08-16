@@ -176,20 +176,40 @@ async fn test_dlq_admin_api_endpoints() {
         return;
     };
 
-    // Pre-populate with one DLQ item
-    let payload = serde_json::json!({
-        "batch_id": "api-batch",
-        "resource_type": "gas",
-        "amount": 75.0,
-        "destination": "GABC...789"
-    });
-    let id = send_to_dlq(
-        &pool,
-        "mint-events",
-        "api-batch:gas",
-        &payload,
-        Some("Initial failure"),
+    // The admin DLQ endpoints are backed by the webhooks dead-letter table
+    // (db/webhooks.sql).  Apply that schema so this test works against a
+    // freshly created CI database.
+    for statement in include_str!("../db/webhooks.sql").split(';') {
+        let statement = statement.trim();
+        if !statement.is_empty() {
+            sqlx::query(statement).execute(&pool).await.unwrap();
+        }
+    }
+
+    // Pre-populate with one webhooks dead-letter entry and its endpoint.
+    use utility_backend::webhooks::dead_letter::{DeadLetterEntry, PostgresDlq};
+    use utility_backend::webhooks::DeadLetterQueue;
+
+    let dlq = PostgresDlq::new(pool.clone());
+    let entry: DeadLetterEntry = dlq
+        .enqueue(
+            "ep-test",
+            uuid::Uuid::new_v4(),
+            "meter.reading",
+            &serde_json::json!({ "meter_id": "M-42" }),
+            "Initial failure",
+        )
+        .await
+        .unwrap();
+
+    sqlx::query(
+        "INSERT INTO webhook_endpoints (id, url, secret, tenant_id) VALUES ($1, $2, $3, $4)",
     )
+    .bind("ep-test")
+    .bind("http://127.0.0.1:1/unreachable")
+    .bind("test-secret")
+    .bind("tenant-1")
+    .execute(&pool)
     .await
     .unwrap();
 
@@ -215,30 +235,32 @@ async fn test_dlq_admin_api_endpoints() {
     // 1. Test GET /api/v1/dlq (List)
     let response = server.get("/api/v1/dlq").await;
     response.assert_status_ok();
-    let list: Vec<utility_backend::settlement::dlq::DlqMessage> = response.json();
+    let list: Vec<DeadLetterEntry> = response.json();
     assert_eq!(list.len(), 1);
-    assert_eq!(list[0].id, id);
+    assert_eq!(list[0].id, entry.id);
+    assert_eq!(list[0].endpoint_id, "ep-test");
 
     // 2. Test GET /api/v1/dlq/:id (Get Specific)
-    let response = server.get(&format!("/api/v1/dlq/{}", id)).await;
+    let response = server.get(&format!("/api/v1/dlq/{}", entry.id)).await;
     response.assert_status_ok();
-    let msg: utility_backend::settlement::dlq::DlqMessage = response.json();
-    assert_eq!(msg.message_id, "api-batch:gas");
+    let msg: DeadLetterEntry = response.json();
+    assert_eq!(msg.event_type, "meter.reading");
+    assert_eq!(msg.endpoint_id, "ep-test");
 
-    // 3. Test POST /api/v1/dlq/:id/retry (Failure scenario - invalid RPC, increments retry)
-    let response = server.post(&format!("/api/v1/dlq/{}/retry", id)).await;
-    response.assert_status(axum::http::StatusCode::INTERNAL_SERVER_ERROR); // Still fails because no valid RPC URL is configured
+    // 3. Test POST /api/v1/dlq/:id/retry (delivery fails: endpoint is
+    //    unreachable).  The handler removes the entry first, so the original
+    //    is gone afterwards.
+    let response = server
+        .post(&format!("/api/v1/dlq/{}/retry", entry.id))
+        .await;
+    response.assert_status_ok();
+    let receipt: utility_backend::api::handlers::RetryDeadLetterResponse = response.json();
+    assert_eq!(receipt.status, 0);
 
-    // Verify retry count got incremented in DB
-    let updated_msg = get_dlq_by_id(&pool, id).await.unwrap().unwrap();
-    assert_eq!(updated_msg.retry_count, 1);
-    assert_eq!(updated_msg.status, "failed");
+    let response = server.get(&format!("/api/v1/dlq/{}", entry.id)).await;
+    response.assert_status(axum::http::StatusCode::NOT_FOUND);
 
     // 4. Test DELETE /api/v1/dlq/:id (Manual deletion)
-    let response = server.delete(&format!("/api/v1/dlq/{}", id)).await;
+    let response = server.delete(&format!("/api/v1/dlq/{}", entry.id)).await;
     response.assert_status(axum::http::StatusCode::NO_CONTENT);
-
-    // Verify it is gone from the DB
-    let deleted_msg = get_dlq_by_id(&pool, id).await.unwrap();
-    assert!(deleted_msg.is_none());
 }
