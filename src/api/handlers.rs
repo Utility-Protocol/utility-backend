@@ -645,7 +645,7 @@ pub async fn list_dead_letters(
     })
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct RetryDeadLetterResponse {
     pub id: Uuid,
     pub status: u16,
