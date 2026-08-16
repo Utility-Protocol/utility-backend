@@ -13,12 +13,30 @@ use utility_backend::settlement::finalizer::Finalizer;
 use utility_backend::settlement::mint_queue::MintQueue;
 use utility_backend::soroban::rpc::CircuitBreaker;
 
-async fn setup_test_db() -> Option<sqlx::PgPool> {
+async fn setup_test_db() -> Option<(sqlx::PgPool, sqlx::pool::PoolConnection<sqlx::Postgres>)> {
     let db_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://utility:utility_secret@localhost:5432/utility_test".into());
 
     match sqlx::PgPool::connect(&db_url).await {
         Ok(pool) => {
+            // Serialize DB access across all test binaries that share this
+            // database.  The advisory lock is session-scoped and released when
+            // the guard connection closes (pool drop at end of test).
+            let mut lock_conn = match pool.acquire().await {
+                Ok(conn) => conn,
+                Err(e) => {
+                    eprintln!("Could not acquire DB lock connection: {e}");
+                    return None;
+                }
+            };
+            if let Err(e) = sqlx::query("SELECT pg_advisory_lock(4000000001)")
+                .execute(&mut *lock_conn)
+                .await
+            {
+                eprintln!("Could not acquire DB advisory lock: {e}");
+                return None;
+            }
+
             // Clean up tables
             let _ = ensure_dlq_schema(&pool).await;
             let _ = sqlx::query("DELETE FROM dead_letter_queue")
@@ -30,7 +48,7 @@ async fn setup_test_db() -> Option<sqlx::PgPool> {
             let _ = sqlx::query("DELETE FROM pending_mints")
                 .execute(&pool)
                 .await;
-            Some(pool)
+            Some((pool, lock_conn))
         }
         Err(_) => {
             eprintln!("Skipping integration test: DATABASE_URL not available");
@@ -41,7 +59,7 @@ async fn setup_test_db() -> Option<sqlx::PgPool> {
 
 #[tokio::test]
 async fn test_dlq_core_repository_operations() {
-    let Some(pool) = setup_test_db().await else {
+    let Some((pool, _db_guard)) = setup_test_db().await else {
         return;
     };
 
@@ -110,7 +128,7 @@ async fn test_dlq_core_repository_operations() {
 
 #[tokio::test]
 async fn test_finalizer_automatic_dead_lettering() {
-    let Some(pool) = setup_test_db().await else {
+    let Some((pool, _db_guard)) = setup_test_db().await else {
         return;
     };
 
@@ -154,7 +172,7 @@ async fn test_finalizer_automatic_dead_lettering() {
 
 #[tokio::test]
 async fn test_dlq_admin_api_endpoints() {
-    let Some(pool) = setup_test_db().await else {
+    let Some((pool, _db_guard)) = setup_test_db().await else {
         return;
     };
 

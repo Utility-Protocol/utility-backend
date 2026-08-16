@@ -5,8 +5,10 @@ use utility_backend::settlement::finalizer::Finalizer;
 use utility_backend::settlement::mint_queue::MintQueue;
 use utility_backend::soroban::rpc::CircuitBreaker;
 
-#[tokio::test]
-async fn test_concurrent_finalization_deduplication() {
+// Serializes DB access with the other integration test binaries that share the
+// utility_test database.  The advisory lock is session-scoped and released when
+// the guard connection closes (pool drop at end of test).
+async fn setup_test_db() -> Option<(sqlx::PgPool, sqlx::pool::PoolConnection<sqlx::Postgres>)> {
     let db_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://utility:utility_secret@localhost:5432/utility_test".into());
 
@@ -14,19 +16,43 @@ async fn test_concurrent_finalization_deduplication() {
         Ok(p) => p,
         Err(_) => {
             eprintln!("Skipping test: DATABASE_URL not available");
-            return;
+            return None;
         }
     };
+
+    let mut lock_conn = match pool.acquire().await {
+        Ok(conn) => conn,
+        Err(e) => {
+            eprintln!("Could not acquire DB lock connection: {e}");
+            return None;
+        }
+    };
+    if let Err(e) = sqlx::query("SELECT pg_advisory_lock(4000000001)")
+        .execute(&mut *lock_conn)
+        .await
+    {
+        eprintln!("Could not acquire DB advisory lock: {e}");
+        return None;
+    }
 
     // Clean up
     sqlx::query("DELETE FROM processed_mints")
         .execute(&pool)
         .await
-        .unwrap();
+        .ok()?;
     sqlx::query("DELETE FROM pending_mints")
         .execute(&pool)
         .await
-        .unwrap();
+        .ok()?;
+
+    Some((pool, lock_conn))
+}
+
+#[tokio::test]
+async fn test_concurrent_finalization_deduplication() {
+    let Some((pool, _db_lock)) = setup_test_db().await else {
+        return;
+    };
 
     let batch_id = "test-batch-123";
     let resource_type = "water";
@@ -71,25 +97,9 @@ async fn test_concurrent_finalization_deduplication() {
 
 #[tokio::test]
 async fn test_aggregation_of_pending_mints() {
-    let db_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://utility:utility_secret@localhost:5432/utility_test".into());
-
-    let pool = match sqlx::PgPool::connect(&db_url).await {
-        Ok(p) => p,
-        Err(_) => {
-            eprintln!("Skipping test: DATABASE_URL not available");
-            return;
-        }
+    let Some((pool, _db_lock)) = setup_test_db().await else {
+        return;
     };
-
-    sqlx::query("DELETE FROM processed_mints")
-        .execute(&pool)
-        .await
-        .unwrap();
-    sqlx::query("DELETE FROM pending_mints")
-        .execute(&pool)
-        .await
-        .unwrap();
 
     let batch_id = "batch-agg";
     let resource_type = "energy";

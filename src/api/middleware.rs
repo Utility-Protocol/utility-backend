@@ -340,11 +340,13 @@ impl DynamicRateLimiter {
 
 pub async fn rate_limit_layer(
     State(limiter): State<Arc<DynamicRateLimiter>>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
     req: Request<Body>,
     next: Next,
 ) -> Response {
-    let source_id = addr.ip().to_string();
+    let source_id = connect_info
+        .map(|ConnectInfo(addr)| addr.ip().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
     if !limiter.try_consume(&source_id) {
         warn!(source = %source_id, "rate limit exceeded");
         return Response::builder()
