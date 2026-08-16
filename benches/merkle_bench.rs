@@ -9,6 +9,7 @@ fn leaves(n: usize) -> Vec<Leaf> {
             commodity_type: (i % 4) as u8,
             scaled_reading: i as i128 * 1_000,
             nonce: i as u64 ^ 0xa5a5_a5a5,
+            hlc_timestamp: i as u64,
         })
         .collect()
 }

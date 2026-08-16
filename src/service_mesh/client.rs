@@ -192,7 +192,9 @@ impl ServiceMeshClient {
     ) -> Vec<(String, Result<reqwest::Response, ServiceMeshClientError>)> {
         let mut results = Vec::new();
         for endpoint in &self.endpoints {
-            let result = self.send_request(&endpoint.name, method.clone(), path, body.clone()).await;
+            let result = self
+                .send_request(&endpoint.name, method.clone(), path, body.clone())
+                .await;
             results.push((endpoint.name.clone(), result));
         }
         results

@@ -106,7 +106,8 @@ pub fn extract_spiffe_id(cert: &CertificateDer<'_>) -> Option<String> {
                 x509_parser::extensions::GeneralNames::from_der(ext.value.data())
             {
                 for name in &names.0 {
-                    if let x509_parser::extensions::GeneralName::UniformResourceIdentifier(uri) = name
+                    if let x509_parser::extensions::GeneralName::UniformResourceIdentifier(uri) =
+                        name
                     {
                         let s = uri.as_str();
                         if s.starts_with("spiffe://") {
@@ -120,9 +121,7 @@ pub fn extract_spiffe_id(cert: &CertificateDer<'_>) -> Option<String> {
     None
 }
 
-pub fn build_server_tls_config(
-    config: &MtlsConfig,
-) -> Result<Option<TlsAcceptor>, MtlsError> {
+pub fn build_server_tls_config(config: &MtlsConfig) -> Result<Option<TlsAcceptor>, MtlsError> {
     if !config.enabled {
         return Ok(None);
     }
@@ -164,16 +163,17 @@ pub fn build_client_tls_config(
         .with_root_certificates(root_store)
         .with_no_client_auth();
 
-    let mut client_config = if Path::new(&config.cert_path).exists() && Path::new(&config.key_path).exists() {
-        let certs = load_certs(&config.cert_path)?;
-        let key = load_private_key(&config.key_path)?;
-        ClientConfig::builder()
-            .with_root_certificates(load_ca_certs(&config.ca_cert_path)?)
-            .with_client_auth_cert(certs, key)
-            .map_err(|e| MtlsError::ClientConfigError(e.to_string()))?
-    } else {
-        builder
-    };
+    let mut client_config =
+        if Path::new(&config.cert_path).exists() && Path::new(&config.key_path).exists() {
+            let certs = load_certs(&config.cert_path)?;
+            let key = load_private_key(&config.key_path)?;
+            ClientConfig::builder()
+                .with_root_certificates(load_ca_certs(&config.ca_cert_path)?)
+                .with_client_auth_cert(certs, key)
+                .map_err(|e| MtlsError::ClientConfigError(e.to_string()))?
+        } else {
+            builder
+        };
 
     info!("mTLS client configured for server: {}", server_name);
     Ok(Some(client_config))
@@ -183,8 +183,7 @@ pub fn verify_peer_spiffe_id(
     cert: &CertificateDer<'_>,
     allowed_ids: &[String],
 ) -> Result<String, MtlsError> {
-    let spiffe_id =
-        extract_spiffe_id(cert).ok_or(MtlsError::SpiffeExtractionFailed)?;
+    let spiffe_id = extract_spiffe_id(cert).ok_or(MtlsError::SpiffeExtractionFailed)?;
     if !allowed_ids.is_empty() && !allowed_ids.contains(&spiffe_id) {
         return Err(MtlsError::SpiffeIdMismatch {
             expected: allowed_ids.join(", "),

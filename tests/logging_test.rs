@@ -75,7 +75,7 @@ async fn test_otel_json_logging_format() {
     let lines: Vec<&str> = output_str.trim().split('\n').collect();
 
     assert!(
-        lines.len() >= 1,
+        !lines.is_empty(),
         "Should have logged at least one message, got: {}",
         output_str
     );

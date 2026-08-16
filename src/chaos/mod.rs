@@ -17,7 +17,7 @@ pub const CRITICAL_PATH_P99_TARGET: Duration = Duration::from_millis(100);
 pub const CANARY_BAKE_TIME: Duration = Duration::from_secs(15 * 60);
 
 /// System area affected by a chaos scenario.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ChaosDomain {
     Gateway,
     Ingestion,

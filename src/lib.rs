@@ -15,6 +15,7 @@ pub mod observability;
 pub mod ratelimit;
 pub mod resilience;
 pub mod secrets;
+pub mod service_mesh;
 pub mod settlement;
 pub mod soroban;
 pub mod storage;
