@@ -625,6 +625,18 @@ lazy_static! {
         &["outcome"]
     )
     .unwrap();
+    pub static ref MIGRATION_STEPS: CounterVec = register_counter_vec!(
+        "utility_migration_steps_total",
+        "Database migration steps by direction",
+        &["direction"]
+    )
+    .unwrap();
+    pub static ref MIGRATION_STEP_DURATION_SECONDS: HistogramVec = register_histogram_vec!(
+        "utility_migration_step_duration_seconds",
+        "Database migration step duration in seconds by direction",
+        &["direction"]
+    )
+    .unwrap();
     pub static ref JOB_SCHEDULER_ENQUEUED: Counter = register_counter!(
         "utility_job_scheduler_enqueued_total",
         "Total jobs enqueued by the job scheduler"
@@ -731,6 +743,13 @@ pub fn record_secret_rotation(name: &str, outcome: &str, duration_ms: f64) {
     SECRET_ROTATION_DURATION_MS
         .with_label_values(&[outcome])
         .observe(duration_ms);
+}
+
+pub fn record_migration_step(direction: &str, duration_seconds: f64) {
+    MIGRATION_STEPS.with_label_values(&[direction]).inc();
+    MIGRATION_STEP_DURATION_SECONDS
+        .with_label_values(&[direction])
+        .observe(duration_seconds);
 }
 
 pub fn inc_job_scheduler_enqueued() {

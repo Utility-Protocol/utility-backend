@@ -63,13 +63,16 @@ async fn test_tenant_rate_limit_integration() {
         ))
         .with_state(tenant_limiter.clone());
 
-    let send_request = |app: Router, tenant: &str| async move {
-        let req = Request::builder()
-            .uri("/")
-            .header("x-tenant-id", tenant)
-            .body(Body::empty())
-            .unwrap();
-        tower::ServiceExt::oneshot(app, req).await.unwrap()
+    let send_request = |app: Router, tenant: &str| {
+        let tenant = tenant.to_owned();
+        async move {
+            let req = Request::builder()
+                .uri("/")
+                .header("x-tenant-id", &tenant)
+                .body(Body::empty())
+                .unwrap();
+            tower::ServiceExt::oneshot(app, req).await.unwrap()
+        }
     };
 
     // grid-east gets 5 tokens (no refill)

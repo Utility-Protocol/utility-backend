@@ -474,7 +474,7 @@ mod tests {
 
     // ---------- TenantRateLimiter tests ----------
 
-    #[test]
+    #[tokio::test]
     fn test_tenant_limit_default() {
         let limiter = TenantRateLimiter::new(100, 100);
         let limit = limiter.tenant_limit("grid-east");
@@ -482,7 +482,7 @@ mod tests {
         assert_eq!(limit.refill_rate, 100);
     }
 
-    #[test]
+    #[tokio::test]
     fn test_tenant_limit_override() {
         let limiter = TenantRateLimiter::new(100, 100);
         limiter.set_tenant_limit("premium", TenantLimit::new(500, 500));
@@ -494,7 +494,7 @@ mod tests {
         assert_eq!(def.max_tokens, 100);
     }
 
-    #[test]
+    #[tokio::test]
     fn test_tenant_override_removal() {
         let limiter = TenantRateLimiter::new(100, 100);
         limiter.set_tenant_limit("temp", TenantLimit::new(999, 999));
@@ -503,7 +503,7 @@ mod tests {
         assert_eq!(limiter.tenant_limit("temp").max_tokens, 100);
     }
 
-    #[test]
+    #[tokio::test]
     fn test_tenant_token_bucket_consume() {
         let limiter = TenantRateLimiter::new(5, 0); // no refill
         for _ in 0..5 {
@@ -512,7 +512,7 @@ mod tests {
         assert!(!limiter.try_consume("grid-north", 1));
     }
 
-    #[test]
+    #[tokio::test]
     fn test_tenant_separate_buckets() {
         let limiter = TenantRateLimiter::new(3, 0);
         // Exhaust tenant-a
@@ -525,7 +525,7 @@ mod tests {
         assert!(limiter.try_consume("tenant-b", 1));
     }
 
-    #[test]
+    #[tokio::test]
     fn test_tenant_rejection_counting() {
         let limiter = TenantRateLimiter::new(1, 0);
         assert!(limiter.try_consume("abuser", 1));
@@ -537,7 +537,7 @@ mod tests {
         assert_eq!(*count, 2);
     }
 
-    #[test]
+    #[tokio::test]
     fn test_tenant_limit_reconfig_resets_bucket() {
         let limiter = TenantRateLimiter::new(5, 0);
         // Exhaust
@@ -554,7 +554,7 @@ mod tests {
         assert!(!limiter.try_consume("upgrade", 1));
     }
 
-    #[test]
+    #[tokio::test]
     fn test_tenant_get_full_status() {
         let limiter = TenantRateLimiter::new(100, 100);
         limiter.set_tenant_limit("vip", TenantLimit::new(1000, 1000));

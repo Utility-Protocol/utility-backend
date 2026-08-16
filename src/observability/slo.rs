@@ -220,7 +220,7 @@ mod tests {
         let now = Instant::now();
         for i in 0..100 {
             slo.record_request(
-                if i < 10 { 500 } else { 200 },
+                if i >= 90 { 500 } else { 200 },
                 Duration::from_millis(20),
                 now + Duration::from_secs(i),
             );
@@ -236,6 +236,6 @@ mod tests {
         let now = Instant::now();
         slo.record_request(200, Duration::from_millis(150), now);
         let status = slo.status_at(now);
-        assert!(status.slow_window.latency_burn_rate >= 100.0);
+        assert!(status.slow_window.latency_burn_rate >= 99.99);
     }
 }

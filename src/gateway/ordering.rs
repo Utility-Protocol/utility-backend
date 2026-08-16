@@ -190,9 +190,7 @@ mod tests {
         let hlc = Arc::new(HybridLogicalClock::new());
         let (tx, _rx) = mpsc::channel(100);
         let mut orderer = CausalOrderer::with_skew(tx, hlc.clone(), 200);
-        // Tick HLC to a known physical time
-        hlc.tick(1000);
-        // Push event with older timestamp (should be flushed immediately)
+        // Push event while the HLC is at 500.
         orderer.push(MeterEvent {
             meter_id: "M1".into(),
             timestamp: 500,
@@ -200,6 +198,8 @@ mod tests {
             token_volume: 0,
             hlc_timestamp: 0,
         });
+        // Advance the HLC past the skew window; the old event should flush.
+        hlc.tick(1000);
         let ready = orderer.flush_ready();
         assert!(
             !ready.is_empty(),

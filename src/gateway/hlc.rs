@@ -188,7 +188,7 @@ mod tests {
         let wall = 1000u64;
         let mut prev_logical = 0u16;
         let mut wrapped = false;
-        for _ in 0..0x10000 {
+        for _ in 0..=0x10000 {
             let t = clock.tick(wall);
             if t.physical() > wall {
                 wrapped = true;
