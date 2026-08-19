@@ -12,7 +12,7 @@ use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tracing::warn;
+use tracing::{warn, Instrument};
 
 lazy_static::lazy_static! {
     static ref START_INSTANT: Instant = Instant::now();
@@ -396,6 +396,23 @@ pub async fn rate_limit_layer(
             .unwrap();
     }
     next.run(req).await
+}
+
+pub async fn correlation_id_layer(mut req: Request<Body>, next: Next) -> Response {
+    let correlation_id = crate::tracing::correlation::correlation_id_from_headers(req.headers());
+    req.extensions_mut().insert(correlation_id.clone());
+
+    let span = tracing::info_span!(
+        "http.correlation",
+        correlation_id = %correlation_id.as_str()
+    );
+
+    let mut response = crate::tracing::correlation::scope(correlation_id.clone(), async move {
+        next.run(req).instrument(span).await
+    })
+    .await;
+    crate::tracing::correlation::insert_header(response.headers_mut(), &correlation_id);
+    response
 }
 
 #[cfg(test)]

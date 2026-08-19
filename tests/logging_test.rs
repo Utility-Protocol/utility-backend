@@ -5,6 +5,7 @@ use std::io;
 use std::sync::{Arc, Mutex};
 use tracing::{info, span, Level};
 use tracing_subscriber::{filter::LevelFilter, layer::SubscriberExt, Registry};
+use utility_backend::tracing::correlation::{scope, CorrelationId};
 use utility_backend::tracing::logging::OtelJsonFormatter;
 
 #[derive(Clone)]
@@ -62,13 +63,17 @@ async fn test_otel_json_logging_format() {
         .with(otel_layer)
         .with(fmt_layer);
 
-    // Run within our custom subscriber
-    tracing::subscriber::with_default(subscriber, || {
-        let test_span = span!(Level::INFO, "test_operation");
-        let _enter = test_span.enter();
+    let correlation_id = CorrelationId::parse("log-correlation-1").unwrap();
+    scope(correlation_id, async {
+        // Run within our custom subscriber
+        tracing::subscriber::with_default(subscriber, || {
+            let test_span = span!(Level::INFO, "test_operation");
+            let _enter = test_span.enter();
 
-        info!("structured log inside span");
-    });
+            info!("structured log inside span");
+        });
+    })
+    .await;
 
     let output_bytes = buffer.lock().unwrap().clone();
     let output_str = String::from_utf8(output_bytes).unwrap();
@@ -90,4 +95,5 @@ async fn test_otel_json_logging_format() {
     assert!(log2["span_id"].is_string(), "Missing span_id in span log");
     assert!(!log2["trace_id"].as_str().unwrap().is_empty());
     assert!(!log2["span_id"].as_str().unwrap().is_empty());
+    assert_eq!(log2["correlation_id"], "log-correlation-1");
 }
