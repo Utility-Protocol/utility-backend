@@ -58,6 +58,20 @@ pub async fn build_router(state: AppState) -> anyhow::Result<Router> {
             get(handlers::tenant_rate_limiter_status),
         )
         .route(
+            "/api/v1/rate-limits/configs",
+            get(handlers::list_rate_limit_configs).post(handlers::create_rate_limit_config),
+        )
+        .route(
+            "/api/v1/rate-limits/configs/audit",
+            get(handlers::list_rate_limit_config_audit),
+        )
+        .route(
+            "/api/v1/rate-limits/configs/:id",
+            get(handlers::get_rate_limit_config)
+                .put(handlers::update_rate_limit_config)
+                .delete(handlers::delete_rate_limit_config),
+        )
+        .route(
             "/api/v1/webhooks/endpoints",
             get(handlers::list_webhook_endpoints).post(handlers::create_webhook_endpoint),
         )
@@ -80,6 +94,10 @@ pub async fn build_router(state: AppState) -> anyhow::Result<Router> {
         .layer(axum_mw::from_fn_with_state(
             state.clone(),
             crate::api::middleware::tenant_rate_limit_layer,
+        ))
+        .layer(axum_mw::from_fn_with_state(
+            state.clone(),
+            crate::api::middleware::service_rate_limit_layer,
         ))
         .layer(axum_mw::from_fn_with_state(
             state.clone(),

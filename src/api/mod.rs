@@ -1,4 +1,4 @@
-use crate::api::middleware::{DynamicRateLimiter, TenantRateLimiter};
+use crate::api::middleware::{DynamicRateLimiter, ServiceRateLimiter, TenantRateLimiter};
 use crate::gateway::hlc::HybridLogicalClock;
 use crate::gateway::lock::AdvisoryLock;
 use crate::soroban::rpc::CircuitBreaker;
@@ -12,6 +12,7 @@ pub mod alloc_tracker;
 pub mod handlers;
 pub mod metrics;
 pub mod middleware;
+pub mod rate_limit_config;
 pub mod router;
 pub mod slo_state;
 
@@ -23,6 +24,7 @@ pub struct AppState {
     pub breaker: Arc<Mutex<CircuitBreaker>>,
     pub rate_limiter: Arc<DynamicRateLimiter>,
     pub tenant_rate_limiter: Arc<TenantRateLimiter>,
+    pub service_rate_limiter: Arc<ServiceRateLimiter>,
     pub hlc: Arc<HybridLogicalClock>,
 }
 
@@ -59,6 +61,12 @@ impl FromRef<AppState> for Arc<DynamicRateLimiter> {
 impl FromRef<AppState> for Arc<TenantRateLimiter> {
     fn from_ref(state: &AppState) -> Self {
         state.tenant_rate_limiter.clone()
+    }
+}
+
+impl FromRef<AppState> for Arc<ServiceRateLimiter> {
+    fn from_ref(state: &AppState) -> Self {
+        state.service_rate_limiter.clone()
     }
 }
 
