@@ -6,41 +6,73 @@ on:
 
 permissions:
   issues: write
+  pull-requests: write
 
 jobs:
   auto-assign:
     runs-on: ubuntu-latest
-    if: >
-      contains(github.event.comment.body, 'assign me') ||
-      contains(github.event.comment.body, 'I want to work on this') ||
-      contains(github.event.comment.body, 'I''d like to work on this') ||
-      contains(github.event.comment.body, 'can I work on this') ||
-      contains(github.event.comment.body, 'I would like to work on this')
     steps:
-      - name: Assign user to issue
+      - name: Check for assign request
         uses: actions/github-script@v6
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const comment = context.payload.comment.body.toLowerCase();
+            const comment = context.payload.comment.body.toLowerCase().trim();
             const assignee = context.payload.comment.user.login;
+            const issueNumber = context.issue.number;
             
-            if (comment.includes('assign me') || 
-                comment.includes('i want to work on this') || 
-                comment.includes("i'd like to work on this") ||
-                comment.includes('can i work on this') ||
-                comment.includes('i would like to work on this')) {
-              
-              await github.rest.issues.addAssignees({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                assignees: [assignee]
-              });
-              
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: `@${assignee} has been assigned to this issue!`
-              });
+            const patterns = [
+              'assign me',
+              'i want to work on this',
+              "i'd like to work on this",
+              'i would like to work on this',
+              'can i work on this',
+              'please assign me',
+              'assign this to me',
+              'i can work on this'
+            ];
+            
+            const shouldAssign = patterns.some(pattern => comment.includes(pattern));
+            
+            if (shouldAssign) {
+              try {
+                // Check if user is already assigned
+                const issue = await github.rest.issues.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issueNumber
+                });
+                
+                const currentAssignees = issue.data.assignees.map(a => a.login);
+                
+                if (currentAssignees.includes(assignee)) {
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: issueNumber,
+                    body: `@${assignee} you are already assigned to this issue.`
+                  });
+                  return;
+                }
+                
+                // Add assignee
+                await github.rest.issues.addAssignees({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issueNumber,
+                  assignees: [assignee]
+                });
+                
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issueNumber,
+                  body: `@${assignee} has been assigned to this issue! 🎉\n\nYou can now start working on it. Good luck!`
+                });
+                
+                console.log(`Successfully assigned @${assignee} to issue #${issueNumber}`);
+              } catch (error) {
+                console.error(`Failed to assign user: ${error.message}`);
+                context.log.error(error);
+              }
             }
