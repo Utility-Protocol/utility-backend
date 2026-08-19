@@ -2,10 +2,10 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
-
 use tracing_subscriber::EnvFilter;
 use utility_backend::api::middleware::{DynamicRateLimiter, TenantRateLimiter};
 use utility_backend::api::AppState;
+use utility_backend::storage::health::{ConnectionPoolHealthProbe, HealthProbeConfig};
 use utility_backend::gateway::hlc::HybridLogicalClock;
 use utility_backend::gateway::lock::AdvisoryLock;
 use utility_backend::gateway::telemetry::{init_open_telemetry, init_tracing_otel_bridge};
@@ -50,6 +50,18 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or_else(|_| "postgres://utility:utility_secret@localhost:5432/utility_test".into());
 
     let db_pool = sqlx::PgPool::connect(&db_url).await?;
+
+    // ─── Connection Pool Health Probe ────────────────────────────────────
+    let pool_arc = std::sync::Arc::new(db_pool.clone());
+    let health_config = HealthProbeConfig::default();
+    let health_probe = std::sync::Arc::new(ConnectionPoolHealthProbe::new(
+    pool_arc,
+    health_config,
+));
+
+// Spawn the health probe background task
+   let _health_task = health_probe.clone().spawn();
+   tracing::info!("Connection pool health probe started");
 
     let sequencer = Arc::new(NonceSequencer::new());
     let reaper = sequencer.clone();

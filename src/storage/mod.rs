@@ -10,6 +10,7 @@
 pub mod backup_verification;
 pub mod checkpoint;
 pub mod durable_queue;
+pub mod health;
 pub mod job_scheduler;
 pub mod migrations;
 pub mod reorg_log;
