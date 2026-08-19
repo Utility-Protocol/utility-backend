@@ -226,6 +226,7 @@ async fn test_dlq_admin_api_endpoints() {
         breaker,
         rate_limiter,
         tenant_rate_limiter: utility_backend::api::middleware::TenantRateLimiter::new(100, 10),
+        service_rate_limiter: utility_backend::api::middleware::ServiceRateLimiter::new(100, 10),
         hlc: Arc::new(utility_backend::gateway::hlc::HybridLogicalClock::new()),
     };
 

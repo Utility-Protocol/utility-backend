@@ -92,6 +92,8 @@ jobs:
           PGPASSWORD=utility_secret psql -h localhost -U utility -d utility_test -f src/time_series/compress.sql
           PGPASSWORD=utility_secret psql -h localhost -U utility -d utility_test -f src/soroban/sync.sql
           PGPASSWORD=utility_secret psql -h localhost -U utility -d utility_test -f src/settlement/schema.sql
+          PGPASSWORD=utility_secret psql -h localhost -U utility -d utility_test -f db/rate_limits.sql
+          PGPASSWORD=utility_secret psql -h localhost -U utility -d utility_test -f db/audit_events.sql
         env:
           PGPASSWORD: utility_secret
 

@@ -773,3 +773,148 @@ pub async fn retry_dlq(
 ) -> Result<Json<RetryDeadLetterResponse>, StatusCode> {
     retry_dlq_entry(pool, id).await
 }
+
+// ---------------------------------------------------------------------------
+// Rate limit configuration handlers
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+pub struct RateLimitConfigListQuery {
+    pub scope_type: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct RateLimitAuditQuery {
+    pub limit: Option<i64>,
+}
+
+fn map_rate_limit_error(error: crate::api::rate_limit_config::RateLimitConfigError) -> StatusCode {
+    match error {
+        crate::api::rate_limit_config::RateLimitConfigError::InvalidScopeKey
+        | crate::api::rate_limit_config::RateLimitConfigError::InvalidMaxTokens
+        | crate::api::rate_limit_config::RateLimitConfigError::InvalidRefillRate
+        | crate::api::rate_limit_config::RateLimitConfigError::InvalidGlobalScopeKey => {
+            StatusCode::BAD_REQUEST
+        }
+        crate::api::rate_limit_config::RateLimitConfigError::NotFound => StatusCode::NOT_FOUND,
+        crate::api::rate_limit_config::RateLimitConfigError::Conflict => StatusCode::CONFLICT,
+        crate::api::rate_limit_config::RateLimitConfigError::Database(_) => {
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    }
+}
+
+pub async fn list_rate_limit_configs(
+    State(pool): State<Pool<Postgres>>,
+    Query(query): Query<RateLimitConfigListQuery>,
+) -> Result<Json<Vec<crate::api::rate_limit_config::RateLimitConfig>>, StatusCode> {
+    let scope_type = query
+        .scope_type
+        .as_deref()
+        .and_then(crate::api::rate_limit_config::RateLimitScopeType::parse);
+    if query.scope_type.is_some() && scope_type.is_none() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    crate::api::rate_limit_config::list_configs(&pool, scope_type)
+        .await
+        .map(Json)
+        .map_err(|e| {
+            tracing::error!(error = %e, "failed to list rate limit configs");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })
+}
+
+pub async fn get_rate_limit_config(
+    State(pool): State<Pool<Postgres>>,
+    Path(id): Path<i64>,
+) -> Result<Json<crate::api::rate_limit_config::RateLimitConfig>, StatusCode> {
+    crate::api::rate_limit_config::get_config(&pool, id)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "failed to get rate limit config");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
+pub async fn create_rate_limit_config(
+    State(state): State<AppState>,
+    Json(body): Json<crate::api::rate_limit_config::CreateRateLimitConfigRequest>,
+) -> Result<(StatusCode, Json<crate::api::rate_limit_config::RateLimitConfig>), StatusCode> {
+    crate::api::rate_limit_config::create_config(
+        &state.pool,
+        &state.rate_limiter,
+        &state.tenant_rate_limiter,
+        &state.service_rate_limiter,
+        body,
+    )
+    .await
+    .map(|config| (StatusCode::CREATED, Json(config)))
+    .map_err(|e| {
+        tracing::error!(error = %e, "failed to create rate limit config");
+        map_rate_limit_error(e)
+    })
+}
+
+pub async fn update_rate_limit_config(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    Json(body): Json<crate::api::rate_limit_config::UpdateRateLimitConfigRequest>,
+) -> Result<Json<crate::api::rate_limit_config::RateLimitConfig>, StatusCode> {
+    crate::api::rate_limit_config::update_config(
+        &state.pool,
+        &state.rate_limiter,
+        &state.tenant_rate_limiter,
+        &state.service_rate_limiter,
+        id,
+        body,
+    )
+    .await
+    .map(Json)
+    .map_err(|e| {
+        tracing::error!(error = %e, "failed to update rate limit config");
+        map_rate_limit_error(e)
+    })
+}
+
+#[derive(Deserialize)]
+pub struct DeleteRateLimitConfigQuery {
+    #[serde(default = "crate::api::rate_limit_config::default_actor")]
+    pub actor: String,
+}
+
+pub async fn delete_rate_limit_config(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    Query(query): Query<DeleteRateLimitConfigQuery>,
+) -> Result<StatusCode, StatusCode> {
+    crate::api::rate_limit_config::delete_config(
+        &state.pool,
+        &state.rate_limiter,
+        &state.tenant_rate_limiter,
+        &state.service_rate_limiter,
+        id,
+        &query.actor,
+    )
+    .await
+    .map(|_| StatusCode::NO_CONTENT)
+    .map_err(|e| {
+        tracing::error!(error = %e, "failed to delete rate limit config");
+        map_rate_limit_error(e)
+    })
+}
+
+pub async fn list_rate_limit_config_audit(
+    State(pool): State<Pool<Postgres>>,
+    Query(query): Query<RateLimitAuditQuery>,
+) -> Result<Json<Vec<crate::api::rate_limit_config::RateLimitAuditEntry>>, StatusCode> {
+    crate::api::rate_limit_config::list_audit_entries(&pool, query.limit.unwrap_or(50))
+        .await
+        .map(Json)
+        .map_err(|e| {
+            tracing::error!(error = %e, "failed to list rate limit audit entries");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })
+}

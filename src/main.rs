@@ -4,7 +4,7 @@ use std::time::Duration;
 use tokio::sync::Mutex;
 
 use tracing_subscriber::EnvFilter;
-use utility_backend::api::middleware::{DynamicRateLimiter, TenantRateLimiter};
+use utility_backend::api::middleware::{DynamicRateLimiter, ServiceRateLimiter, TenantRateLimiter};
 use utility_backend::api::AppState;
 use utility_backend::gateway::hlc::HybridLogicalClock;
 use utility_backend::gateway::lock::AdvisoryLock;
@@ -83,6 +83,30 @@ async fn main() -> anyhow::Result<()> {
     let breaker = Arc::new(Mutex::new(CircuitBreaker::new(5)));
     let rate_limiter = DynamicRateLimiter::new();
     let tenant_rate_limiter = TenantRateLimiter::new(1000, 1000);
+    let service_rate_limiter = ServiceRateLimiter::new(1000, 1000);
+
+    if let Err(e) = utility_backend::api::rate_limit_config::ensure_schema(&db_pool).await {
+        tracing::warn!("rate limit config schema init failed: {}", e);
+    }
+    for statement in include_str!("../db/audit_events.sql").split(';') {
+        let statement = statement.trim();
+        if !statement.is_empty() {
+            if let Err(e) = sqlx::query(statement).execute(&db_pool).await {
+                tracing::warn!("audit events schema init failed: {}", e);
+            }
+        }
+    }
+    if let Err(e) = utility_backend::api::rate_limit_config::hydrate_from_db(
+        &db_pool,
+        &rate_limiter,
+        &tenant_rate_limiter,
+        &service_rate_limiter,
+    )
+    .await
+    {
+        tracing::warn!("failed to hydrate rate limit configs: {}", e);
+    }
+
     let hlc = Arc::new(HybridLogicalClock::new());
 
     let pd_client = utility_backend::incident::PagerDutyClient::from_env();
@@ -116,6 +140,7 @@ async fn main() -> anyhow::Result<()> {
         breaker,
         rate_limiter,
         tenant_rate_limiter,
+        service_rate_limiter,
         hlc,
     };
 

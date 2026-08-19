@@ -4,6 +4,8 @@ use sha2::{Digest, Sha256};
 
 use crate::api::metrics;
 
+pub mod store;
+
 pub const GENESIS_PREVIOUS_HASH: &str =
     "0000000000000000000000000000000000000000000000000000000000000000";
 

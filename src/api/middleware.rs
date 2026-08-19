@@ -6,7 +6,7 @@ use axum::{
     response::Response,
 };
 use dashmap::DashMap;
-use parking_lot::Mutex;
+use parking_lot::{Mutex, RwLock};
 use std::collections::VecDeque;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -128,7 +128,8 @@ pub struct FraudContext {
 }
 
 pub struct DynamicRateLimiter {
-    pub(crate) global_bucket: TokenBucket,
+    global_bucket: RwLock<Arc<TokenBucket>>,
+    default_source_limit: RwLock<(u64, u64)>,
     pub(crate) per_source_buckets: DashMap<String, Arc<TokenBucket>>,
     pub(crate) sliding_windows: DashMap<String, Arc<Mutex<SlidingWindow>>>,
     pub(crate) fraud_contexts: DashMap<String, Arc<Mutex<FraudContext>>>,
@@ -136,10 +137,22 @@ pub struct DynamicRateLimiter {
     pub(crate) last_accessed: DashMap<String, Instant>,
 }
 
+const DEFAULT_GLOBAL_MAX_TOKENS: u64 = 10_000;
+const DEFAULT_GLOBAL_REFILL_RATE: u64 = 10_000;
+const DEFAULT_SOURCE_MAX_TOKENS: u64 = 100;
+const DEFAULT_SOURCE_REFILL_RATE: u64 = 100;
+
 impl DynamicRateLimiter {
     pub fn new() -> Arc<Self> {
         let limiter = Arc::new(Self {
-            global_bucket: TokenBucket::new(10000, 10000),
+            global_bucket: RwLock::new(Arc::new(TokenBucket::new(
+                DEFAULT_GLOBAL_MAX_TOKENS,
+                DEFAULT_GLOBAL_REFILL_RATE,
+            ))),
+            default_source_limit: RwLock::new((
+                DEFAULT_SOURCE_MAX_TOKENS,
+                DEFAULT_SOURCE_REFILL_RATE,
+            )),
             per_source_buckets: DashMap::new(),
             sliding_windows: DashMap::new(),
             fraud_contexts: DashMap::new(),
@@ -157,6 +170,20 @@ impl DynamicRateLimiter {
         });
 
         limiter
+    }
+
+    /// Hot-reload the global token bucket without restarting the service.
+    pub fn set_global_limit(&self, max_tokens: u64, refill_rate: u64) {
+        *self.global_bucket.write() = Arc::new(TokenBucket::new(max_tokens, refill_rate));
+    }
+
+    /// Restore the built-in global defaults after a config row is deleted.
+    pub fn reset_global_limit(&self) {
+        self.set_global_limit(DEFAULT_GLOBAL_MAX_TOKENS, DEFAULT_GLOBAL_REFILL_RATE);
+    }
+
+    fn default_source_limit(&self) -> (u64, u64) {
+        *self.default_source_limit.read()
     }
 
     fn prune_inactive_sources(&self) {
@@ -211,13 +238,19 @@ impl DynamicRateLimiter {
         };
 
         // 2. Global rate limit
-        if !self.global_bucket.try_consume(1) {
+        let global_bucket = self.global_bucket.read().clone();
+        if !global_bucket.try_consume(1) {
             self.increment_rejection("global");
             return false;
         }
 
         // 3. Per-source rate limit
-        let limit = if is_flagged { 10 } else { 100 };
+        let (default_max, default_refill) = self.default_source_limit();
+        let limit = if is_flagged {
+            10
+        } else {
+            default_max.max(default_refill)
+        };
 
         let bucket = {
             let b = self
@@ -225,7 +258,7 @@ impl DynamicRateLimiter {
                 .get(source_id)
                 .map(|e| e.value().clone());
             if let Some(b) = b {
-                if b.refill_rate == limit || source_id.starts_with("test-large-") {
+                if (b.max_tokens == limit && b.refill_rate == limit) || source_id.starts_with("test-large-") {
                     b
                 } else {
                     let new_b = Arc::new(TokenBucket::new(limit, limit));
@@ -338,12 +371,20 @@ impl DynamicRateLimiter {
     }
 }
 
+pub fn is_rate_limit_admin_path(path: &str) -> bool {
+    path.starts_with("/api/v1/rate-limits/configs")
+}
+
 pub async fn rate_limit_layer(
     State(limiter): State<Arc<DynamicRateLimiter>>,
     connect_info: Option<ConnectInfo<SocketAddr>>,
     req: Request<Body>,
     next: Next,
 ) -> Response {
+    if is_rate_limit_admin_path(req.uri().path()) {
+        return next.run(req).await;
+    }
+
     let source_id = connect_info
         .map(|ConnectInfo(addr)| addr.ip().to_string())
         .unwrap_or_else(|| "unknown".to_string());
@@ -418,18 +459,19 @@ mod tests {
         let source = "test-large-source";
 
         // Use a very high global limit and per-source limit to ensure we can reach 1000
-        limiter.global_bucket.tokens.store(100000, Ordering::SeqCst);
+        limiter.set_global_limit(100_000, 100_000);
         limiter
             .per_source_buckets
             .insert(source.to_string(), Arc::new(TokenBucket::new(2000, 2000)));
 
         for i in 0..1000 {
             let ok = limiter.try_consume(source);
+            let global_tokens = limiter.global_bucket.read().tokens.load(Ordering::SeqCst);
             assert!(
                 ok,
                 "Failed at request {} - Global: {}, Per: {}",
                 i,
-                limiter.global_bucket.tokens.load(Ordering::SeqCst),
+                global_tokens,
                 limiter
                     .per_source_buckets
                     .get(source)
@@ -750,6 +792,10 @@ pub async fn tenant_rate_limit_layer(
     req: Request<Body>,
     next: Next,
 ) -> Response {
+    if is_rate_limit_admin_path(req.uri().path()) {
+        return next.run(req).await;
+    }
+
     let tenant_id = req
         .headers()
         .get("x-tenant-id")
@@ -761,6 +807,67 @@ pub async fn tenant_rate_limit_layer(
         return Response::builder()
             .status(StatusCode::TOO_MANY_REQUESTS)
             .body(Body::from("tenant rate limit exceeded"))
+            .unwrap();
+    }
+    next.run(req).await
+}
+
+/// Per-service tier rate limiter (same token-bucket engine as tenant limiting).
+#[derive(Clone)]
+pub struct ServiceRateLimiter(Arc<TenantRateLimiter>);
+
+impl ServiceRateLimiter {
+    pub fn new(default_max_tokens: u64, default_refill_rate: u64) -> Arc<Self> {
+        Arc::new(Self(TenantRateLimiter::new(
+            default_max_tokens,
+            default_refill_rate,
+        )))
+    }
+
+    pub fn inner(&self) -> &Arc<TenantRateLimiter> {
+        &self.0
+    }
+
+    pub fn set_service_limit(&self, service_id: &str, limit: TenantLimit) {
+        self.0.set_tenant_limit(service_id, limit);
+    }
+
+    pub fn remove_service_override(&self, service_id: &str) {
+        self.0.remove_tenant_override(service_id);
+    }
+
+    pub fn try_consume(&self, service_id: &str, tokens: u64) -> bool {
+        self.0.try_consume(service_id, tokens)
+    }
+}
+
+/// Axum middleware that enforces per-service tier rate limits.
+///
+/// The service tier is identified via the `X-Service-ID` request header. When
+/// the header is absent the request bypasses service-tier limiting.
+pub async fn service_rate_limit_layer(
+    State(limiter): State<Arc<ServiceRateLimiter>>,
+    req: Request<Body>,
+    next: Next,
+) -> Response {
+    if is_rate_limit_admin_path(req.uri().path()) {
+        return next.run(req).await;
+    }
+
+    let Some(service_id) = req
+        .headers()
+        .get("x-service-id")
+        .and_then(|v| v.to_str().ok())
+        .filter(|value| !value.is_empty())
+    else {
+        return next.run(req).await;
+    };
+
+    if !limiter.try_consume(service_id, 1) {
+        warn!(service = %service_id, "service rate limit exceeded");
+        return Response::builder()
+            .status(StatusCode::TOO_MANY_REQUESTS)
+            .body(Body::from("service rate limit exceeded"))
             .unwrap();
     }
     next.run(req).await
