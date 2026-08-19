@@ -1,5 +1,5 @@
 use axum::{
-    body::Body,
+    body::{to_bytes, Body},
     extract::ConnectInfo,
     http::{Request, StatusCode},
     middleware as axum_mw,
@@ -8,7 +8,11 @@ use axum::{
 };
 use std::net::SocketAddr;
 use utility_backend::api::middleware::{
-    rate_limit_layer, tenant_rate_limit_layer, DynamicRateLimiter, TenantRateLimiter,
+    correlation_id_layer, rate_limit_layer, tenant_rate_limit_layer, DynamicRateLimiter,
+    TenantRateLimiter,
+};
+use utility_backend::tracing::correlation::{
+    current_correlation_id, CORRELATION_ID_HEADER,
 };
 
 #[tokio::test]
@@ -112,4 +116,32 @@ async fn test_tenant_rate_limit_anonymous() {
     }
     let res = send_no_header(app.clone()).await;
     assert_eq!(res.status(), StatusCode::TOO_MANY_REQUESTS);
+}
+
+#[tokio::test]
+async fn test_correlation_id_middleware_propagates_context_and_response_header() {
+    let app = Router::new()
+        .route(
+            "/",
+            get(|| async { current_correlation_id().unwrap_or_else(|| "missing".to_string()) }),
+        )
+        .layer(axum_mw::from_fn(correlation_id_layer));
+
+    let req = Request::builder()
+        .uri("/")
+        .header(CORRELATION_ID_HEADER, "request-abc")
+        .body(Body::empty())
+        .unwrap();
+
+    let res = tower::ServiceExt::oneshot(app, req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(
+        res.headers()
+            .get(CORRELATION_ID_HEADER)
+            .and_then(|value| value.to_str().ok()),
+        Some("request-abc")
+    );
+
+    let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    assert_eq!(body.as_ref(), b"request-abc");
 }

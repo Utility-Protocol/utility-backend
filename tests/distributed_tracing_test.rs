@@ -17,6 +17,9 @@ use utility_backend::gateway::telemetry::{
 use utility_backend::tracing::kafka_propagator::{
     extract_from_kafka_headers, inject_into_kafka_headers,
 };
+use utility_backend::tracing::correlation::{
+    extract_from_message_headers, scope, CorrelationId, CORRELATION_ID_HEADER,
+};
 
 // ── OTLP Exporter & TracerProvider ──────────────────────────────────
 
@@ -111,6 +114,24 @@ async fn test_kafka_headers_inject_extract_roundtrip() {
         extracted.span().span_context().trace_id(),
         trace_id,
         "trace_id must survive Kafka header round-trip"
+    );
+}
+
+#[tokio::test]
+async fn test_kafka_headers_include_current_correlation_id() {
+    let _ = init_open_telemetry("kafka-correlation-test");
+    let id = CorrelationId::parse("corr-789").unwrap();
+    let parent = opentelemetry::Context::new();
+
+    let headers = scope(id, async { inject_into_kafka_headers(&parent) }).await;
+
+    assert_eq!(
+        headers.get(CORRELATION_ID_HEADER).map(String::as_str),
+        Some("corr-789")
+    );
+    assert_eq!(
+        extract_from_message_headers(&headers).unwrap().as_str(),
+        "corr-789"
     );
 }
 

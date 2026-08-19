@@ -1,3 +1,4 @@
+pub mod correlation;
 pub mod db_tracing;
 pub mod exporters;
 pub mod kafka_propagator;

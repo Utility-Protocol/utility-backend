@@ -198,6 +198,12 @@ where
                 .unwrap()
                 .insert("span_id".to_string(), serde_json::Value::String(s_id));
         }
+        if let Some(correlation_id) = crate::tracing::correlation::current_correlation_id() {
+            log_record.as_object_mut().unwrap().insert(
+                "correlation_id".to_string(),
+                serde_json::Value::String(correlation_id),
+            );
+        }
 
         if !visitor.attributes.is_empty() {
             log_record.as_object_mut().unwrap().insert(

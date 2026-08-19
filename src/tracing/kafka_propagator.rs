@@ -31,6 +31,7 @@ pub fn inject_into_kafka_headers(cx: &Context) -> HashMap<String, String> {
     global::get_text_map_propagator(|propagator| {
         propagator.inject_context(cx, &mut KafkaHeaderInjector(&mut headers));
     });
+    crate::tracing::correlation::inject_current_into_message_headers(&mut headers);
     headers
 }
 

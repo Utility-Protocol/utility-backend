@@ -109,6 +109,9 @@ pub async fn build_router(state: AppState) -> anyhow::Result<Router> {
         .layer(axum_mw::from_fn(
             crate::api::middleware::slo_monitoring_layer,
         ))
+        .layer(axum_mw::from_fn(
+            crate::api::middleware::correlation_id_layer,
+        ))
         .layer(cors)
         .with_state(state);
 

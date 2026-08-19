@@ -144,9 +144,12 @@ impl ServiceMeshClient {
             req = req.header("content-type", "application/json").body(b);
         }
 
-        req.header("x-service-name", &self.identity.service_account)
+        req = req
+            .header("x-service-name", &self.identity.service_account)
             .header("x-trust-domain", &self.identity.trust_domain)
-            .timeout(std::time::Duration::from_secs(endpoint.timeout_secs))
+            .timeout(std::time::Duration::from_secs(endpoint.timeout_secs));
+
+        crate::tracing::correlation::propagate_reqwest(req)
             .send()
             .await
             .map_err(|e| ServiceMeshClientError::HttpError(e.to_string()))
@@ -164,10 +167,12 @@ impl ServiceMeshClient {
             .join(endpoint.health_check_path.trim_start_matches('/'))
             .map_err(|e| ServiceMeshClientError::HttpError(e.to_string()))?;
 
-        match self
+        let req = self
             .http_client
             .get(url)
-            .timeout(std::time::Duration::from_secs(5))
+            .timeout(std::time::Duration::from_secs(5));
+
+        match crate::tracing::correlation::propagate_reqwest(req)
             .send()
             .await
         {
