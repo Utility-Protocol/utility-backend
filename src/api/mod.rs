@@ -10,6 +10,7 @@ use tokio::sync::Mutex;
 
 pub mod alloc_tracker;
 pub mod handlers;
+pub mod health;
 pub mod metrics;
 pub mod middleware;
 pub mod rate_limit_config;
@@ -26,6 +27,7 @@ pub struct AppState {
     pub tenant_rate_limiter: Arc<TenantRateLimiter>,
     pub service_rate_limiter: Arc<ServiceRateLimiter>,
     pub hlc: Arc<HybridLogicalClock>,
+    pub health_aggregator: Arc<crate::api::health::HealthAggregator>,
 }
 
 impl FromRef<AppState> for Arc<NonceSequencer> {

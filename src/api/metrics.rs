@@ -775,3 +775,18 @@ pub fn inc_job_scheduler_failed() {
 pub fn set_dlq_messages_count(queue: &str, status: &str, count: f64) {
     DLQ_MESSAGES.with_label_values(&[queue, status]).set(count);
 }
+
+lazy_static! {
+    pub static ref HEALTH_CHECK_STATUS: GaugeVec = register_gauge_vec!(
+        "utility_downstream_health_check_status",
+        "Health check status of downstream services (1 = UP, 0 = DOWN)",
+        &["service"]
+    )
+    .unwrap();
+}
+
+pub fn set_health_status(service: &str, status: f64) {
+    HEALTH_CHECK_STATUS
+        .with_label_values(&[service])
+        .set(status);
+}
