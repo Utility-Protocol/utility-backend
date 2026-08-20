@@ -10,7 +10,7 @@ groups:
         annotations:
           summary: "PostgreSQL pool is unhealthy"
           description: "The database connection pool has been unhealthy for more than 1 minute. Check database connectivity and pool status."
-          runbook_url: "https://github.com/utility-backend/DOCS.md#database-pool-health-probe---runbook"
+          runbook_url: "https://github.com/utility-backend/README.md#database-pool-health-probe---runbook"
 
       - alert: DatabasePoolDegraded
         expr: pool_health_status == 1  # Degraded
@@ -20,7 +20,7 @@ groups:
         annotations:
           summary: "PostgreSQL pool is degraded"
           description: "The database connection pool has been degraded for more than 5 minutes. Check query latency and connection health."
-          runbook_url: "https://github.com/utility-backend/DOCS.md#database-pool-health-probe---runbook"
+          runbook_url: "https://github.com/utility-backend/README.md#database-pool-health-probe---runbook"
 
       - alert: DatabasePoolHighLatency
         expr: pool_query_latency_ms > 100
@@ -30,7 +30,7 @@ groups:
         annotations:
           summary: "Database query latency > 100ms"
           description: "Database query latency is above 100ms for more than 5 minutes. Investigate database performance."
-          runbook_url: "https://github.com/utility-backend/DOCS.md#database-pool-health-probe---runbook"
+          runbook_url: "https://github.com/utility-backend/README.md#database-pool-health-probe---runbook"
 
       - alert: DatabasePoolConnectionExhausted
         expr: pool_utilization_ratio > 0.90
@@ -40,4 +40,4 @@ groups:
         annotations:
           summary: "Database pool utilization > 90%"
           description: "Database connection pool utilization is above 90% for more than 2 minutes. Consider increasing pool size or scaling database."
-          runbook_url: "https://github.com/utility-backend/DOCS.md#database-pool-health-probe---runbook"
+          runbook_url: "https://github.com/utility-backend/README.md#database-pool-health-probe---runbook"
