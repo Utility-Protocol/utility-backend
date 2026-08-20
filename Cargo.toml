@@ -49,7 +49,7 @@ lru = "0.12"
 socket2 = { version = "0.6", features = ["all"] }
 libc = "0.2"
 thread_local = "1"
-rocksdb = "0.24"
+rocksdb = "0.25"
 p256 = { version = "0.14", features = ["ecdsa"] }
 ecdsa = "0.17"
 x509-cert = { version = "0.2", features = ["builder"] }
