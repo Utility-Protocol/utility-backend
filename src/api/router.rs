@@ -13,6 +13,8 @@ pub async fn build_router(state: AppState) -> anyhow::Result<Router> {
 
     let app = Router::new()
         .route("/health", get(|| async { "ok" }))
+        .route("/health/summary", get(crate::api::health::summary_health))
+        .route("/health/detailed", get(crate::api::health::detailed_health))
         .route("/readyz", get(handlers::readyz_handler))
         .route("/api/v1/meters", get(handlers::list_meters))
         .route("/api/v1/meters/:id", get(handlers::get_meter))

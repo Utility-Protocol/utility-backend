@@ -145,6 +145,17 @@ async fn main() -> anyhow::Result<()> {
 
     utility_backend::incident::init_global_incident_manager(incident_manager.clone());
 
+    let mesh_discovery = Arc::new(utility_backend::service_mesh::client::ServiceMeshDiscovery::new());
+    let health_aggregator = Arc::new(utility_backend::api::health::HealthAggregator::new(
+        mesh_discovery.clone(),
+        utility_backend::service_mesh::ServiceMeshMtlsConfig::default(),
+        utility_backend::service_mesh::MeshIdentity {
+            trust_domain: "utility.local".to_string(),
+            namespace: "default".to_string(),
+            service_account: "utility-backend".to_string(),
+        },
+    ));
+
     let state = AppState {
         sequencer,
         pool: db_pool,
@@ -154,6 +165,7 @@ async fn main() -> anyhow::Result<()> {
         tenant_rate_limiter,
         service_rate_limiter,
         hlc,
+        health_aggregator,
     };
 
     let app = utility_backend::api::router::build_router(state).await?;
