@@ -41,11 +41,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-dependency-security-
 
-      - name: Install cargo-audit
-        run: cargo install cargo-audit --locked
-
-      - name: Install cargo-deny
-        run: cargo install cargo-deny --locked
+      - name: Install cargo-audit and cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit,cargo-deny
 
       - name: Scan for RustSec advisories
         run: cargo audit --deny warnings
