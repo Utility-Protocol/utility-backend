@@ -5,6 +5,7 @@ pub mod cache;
 pub mod capacity;
 pub mod chaos;
 pub mod gateway;
+pub mod graphql;
 pub mod identity;
 pub mod incident;
 pub mod ingestion;

@@ -3,6 +3,7 @@ use axum::{
     routing::{delete, get, post},
     Router,
 };
+use std::sync::Arc;
 use tower_http::cors::CorsLayer;
 
 use super::handlers;
@@ -10,6 +11,10 @@ use super::AppState;
 
 pub async fn build_router(state: AppState) -> anyhow::Result<Router> {
     let cors = CorsLayer::permissive();
+
+    // ── GraphQL schema with subscription support (#242) ──────────────
+    let pubsub = Arc::new(crate::graphql::pubsub::SimplePubSub::new(256));
+    let graphql_schema = crate::graphql::build_schema(pubsub.clone());
 
     let app = Router::new()
         .route("/health", get(|| async { "ok" }))
@@ -92,6 +97,18 @@ pub async fn build_router(state: AppState) -> anyhow::Result<Router> {
         .route(
             "/api/v1/webhooks/dead-letter/:id/retry",
             post(handlers::retry_dead_letter),
+        )
+        // ── GraphQL endpoint with subscription support (#242) ─────────
+        .route(
+            "/api/graphql",
+            get(async_graphql_axum::GraphQL::new(graphql_schema.clone()))
+                .post(async_graphql_axum::GraphQL::new(graphql_schema.clone())),
+        )
+        .route(
+            "/api/graphql/ws",
+            get(async_graphql_axum::GraphQLSubscription::new(
+                graphql_schema.clone(),
+            )),
         )
         .layer(axum_mw::from_fn_with_state(
             state.clone(),

@@ -2,6 +2,7 @@ pub mod api_tests;
 mod chaos;
 pub mod gateway;
 pub mod gateway_tests;
+pub mod graphql_subscription_tests;
 pub mod identity;
 pub mod ingestion;
 pub mod ratelimit;
