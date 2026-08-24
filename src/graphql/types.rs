@@ -1,5 +1,6 @@
 /// GraphQL types for meter readings and billing event subscriptions (#242).
 use async_graphql::*;
+use serde::{Deserialize, Serialize};
 
 /// A single meter reading event delivered via subscription.
 #[derive(SimpleObject, Clone, Debug, Serialize, Deserialize)]
