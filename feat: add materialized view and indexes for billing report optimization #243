@@ -1,0 +1,21 @@
+-- Indexes don saurin aggregation
+CREATE INDEX IF NOT EXISTS idx_billing_records_account_month 
+ON billing_records(account_id, date_trunc('month', created_at));
+
+CREATE INDEX IF NOT EXISTS idx_billing_records_created_at 
+ON billing_records(created_at DESC);
+
+-- Materialized View don monthly report
+CREATE MATERIALIZED VIEW IF NOT EXISTS monthly_billing_report AS
+SELECT 
+    account_id,
+    date_trunc('month', created_at) as report_month,
+    COUNT(*) as total_transactions,
+    SUM(amount) as total_amount,
+    AVG(amount) as avg_amount
+FROM billing_records
+GROUP BY account_id, date_trunc('month', created_at)
+WITH NO DATA;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_mv_account_month 
+ON monthly_billing_report(account_id, report_month);
