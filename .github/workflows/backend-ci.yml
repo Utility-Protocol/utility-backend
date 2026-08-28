@@ -87,6 +87,63 @@ jobs:
         env:
           DATABASE_URL: postgres://utility:utility_secret@localhost:5432/utility_test
 
+  perf-regression:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      # Restores the most recent baseline recorded from a push to `main`.
+      # Cache entries are immutable per key in GitHub Actions, so main-branch
+      # runs always save under a fresh (per-commit) key below; PR runs use
+      # the `perf-baseline-` prefix to fall back to the most recent one.
+      - name: Restore performance baseline
+        uses: actions/cache/restore@v4
+        with:
+          path: perf-baseline.json
+          key: perf-baseline-${{ github.sha }}
+          restore-keys: |
+            perf-baseline-
+
+      - name: Run benchmarks
+        run: cargo bench --all-features
+
+      - name: Extract benchmark results
+        run: python3 scripts/perf_regression_check.py extract --criterion-dir target/criterion --out current-perf.json
+
+      - name: Compare against baseline (fails the build on a >10% regression)
+        run: python3 scripts/perf_regression_check.py compare --baseline perf-baseline.json --current current-perf.json --threshold 0.10
+
+      - name: Upload criterion HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: criterion-report
+          path: target/criterion
+          retention-days: 30
+
+      - name: Record new baseline (main branch only)
+        if: github.ref == 'refs/heads/main'
+        run: cp current-perf.json perf-baseline.json
+
+      - name: Save performance baseline (main branch only)
+        if: github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: perf-baseline.json
+          key: perf-baseline-${{ github.sha }}
+
   docker-build:
     runs-on: ubuntu-latest
     steps:
