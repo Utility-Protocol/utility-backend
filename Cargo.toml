@@ -95,3 +95,7 @@ harness = false
 [[bench]]
 name = "stream_throughput"
 harness = false
+
+[[bench]]
+name = "arena_bench"
+harness = false

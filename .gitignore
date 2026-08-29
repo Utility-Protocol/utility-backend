@@ -2,3 +2,4 @@
 
 # Rust incremental compilation temp artifacts
 *.rcgu.o
+__pycache__/
