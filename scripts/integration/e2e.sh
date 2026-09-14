@@ -45,13 +45,7 @@ FAILURES=()
 
 cleanup() {
   for pid in "$BACKEND_PID" "$FRONTEND_PID"; do
-    [ -n "$pid" ] || continue
-    kill "$pid" 2>/dev/null || true
-    pkill -P "$pid" 2>/dev/null || true
-  done
-  sleep 1
-  for pid in "$BACKEND_PID" "$FRONTEND_PID"; do
-    [ -n "$pid" ] && kill "$pid" 2>/dev/null || true
+    [ -n "$pid" ] && kill_tree "$pid"
   done
   if [ "${KEEP:-}" != "1" ]; then
     rm -rf "$TMPDIR_E2E"
@@ -59,6 +53,15 @@ cleanup() {
     echo ""
     echo "[e2e] keeping artifacts in $TMPDIR_E2E"
   fi
+}
+
+kill_tree() {
+  local pid="$1"
+  local child
+  for child in $(pgrep -P "$pid" 2>/dev/null || true); do
+    kill_tree "$child"
+  done
+  kill "$pid" 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -106,7 +109,7 @@ FUNDED=0
 until [ "$FUNDED" = "1" ]; do
   TRIES=$((TRIES + 1))
   RESP="$(curl_once "https://friendbot.stellar.org?addr=$PUBLIC" || true)"
-  if printf '%s' "$RESP" | grep -qE '"successful"\s*:\s*true'; then
+  if printf '%s' "$RESP" | grep -qE '"successful"[[:space:]]*:[[:space:]]*true'; then
     FUNDED=1
   elif [ "$TRIES" -gt 8 ]; then
     fail "friendbot funding (final response: $(printf '%s' "$RESP" | head -c 200))"
