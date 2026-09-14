@@ -214,6 +214,34 @@ describe('XDR event decoding', () => {
     assert.equal(decoded.cursor, 'ledger-tx-index');
   });
 
+  it('decodes real SDK-12.3 parsed event shape (topic/value/id)', () => {
+    const pk = Buffer.alloc(32, 9);
+    const accountId = new xdr.AccountId('publicKeyTypeEd25519', pk);
+    const scAddress = xdr.ScAddress.scAddressTypeAccount(accountId);
+    const realEvent = {
+      topic: [
+        xdr.ScVal.scvSymbol('billed'),
+        xdr.ScVal.scvAddress(scAddress),
+      ],
+      value: xdr.ScVal.scvVec([
+        xdr.ScVal.scvU64(new xdr.Uint64('55')),
+        xdr.ScVal.scvI128(new xdr.Int128Parts({
+          hi: new xdr.Uint64('0'),
+          lo: new xdr.Uint64('8888'),
+        })),
+        xdr.ScVal.scvU64(new xdr.Uint64('1789400000')),
+      ]),
+      id: '0020099900012345678-0000000000',
+      inSuccessfulContractCall: true,
+    };
+    const decoded = decodeBilledEvent(realEvent);
+    assert.ok(decoded);
+    assert.equal(decoded.delta_units, 55n);
+    assert.equal(decoded.delta_cost, '8888');
+    assert.equal(decoded.timestamp, 1789400000n);
+    assert.equal(decoded.event_id, '0020099900012345678-0000000000');
+  });
+
   it('rejects events with a non-billed topic', () => {
     const pk = Buffer.alloc(32, 1);
     const accountId = new xdr.AccountId('publicKeyTypeEd25519', pk);

@@ -98,7 +98,8 @@ export async function pollEvents(broadcastCallback) {
   }
 
   if (events.length > 0) {
-    store.setLatestCursor(events[events.length - 1].paging_token);
+    const last = events[events.length - 1];
+    store.setLatestCursor(last.paging_token ?? last.id);
   }
 }
 
@@ -138,15 +139,24 @@ function toWebPayload(decoded) {
 
 export function decodeBilledEvent(rpcEvent) {
   const contractEvent = rpcEvent.event;
-  const v0 = contractEvent.body().v0();
+  let topics;
+  let dataValue;
 
-  const topics = v0.topics();
+  if (contractEvent) {
+    const v0 = contractEvent.body().v0();
+    topics = v0.topics();
+    dataValue = v0.data();
+  } else {
+    topics = rpcEvent.topic;
+    dataValue = rpcEvent.value;
+  }
+
   if (!topics || topics.length < 2) return null;
   if (!isSymbol(topics[0], BILLED_TOPIC)) return null;
 
   const deviceId = addressFromScVal(topics[1]);
 
-  const dataParts = v0.data().vec();
+  const dataParts = vecOf(dataValue);
   if (!dataParts || dataParts.length !== 3) return null;
 
   return {

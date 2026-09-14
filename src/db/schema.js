@@ -78,8 +78,6 @@ function prepareStatements() {
         owner                  = excluded.owner,
         rate_per_unit          = excluded.rate_per_unit,
         deposit_balance        = excluded.deposit_balance,
-        total_units_consumed   = excluded.total_units_consumed,
-        last_seen_timestamp    = excluded.last_seen_timestamp,
         updated_at             = CURRENT_TIMESTAMP
     `),
     getDevice: db.prepare('SELECT * FROM devices WHERE id = ?'),
