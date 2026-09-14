@@ -1,13 +1,16 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 
-import { SorobanRpc, TransactionBuilder, Operation, Keypair, xdr, StrKey, hash, Address } from '@stellar/stellar-sdk';
+import sdk from '@stellar/stellar-sdk';
+import { TransactionBuilder, Operation, Keypair, xdr, StrKey, hash, Address } from '@stellar/stellar-sdk';
+
+const rpcNs = sdk.SorobanRpc ?? sdk.rpc;
 
 const [,, wasmPath, secret, outPath] = process.argv;
-const rpcUrl = 'https://soroban-testnet.stellar.org';
-const NETWORK = 'Test SDF Network ; September 2015';
+const rpcUrl = process.env.E2E_RPC_URL ?? 'https://soroban-testnet.stellar.org';
+const NETWORK = process.env.E2E_NETWORK_PASSPHRASE ?? 'Test SDF Network ; September 2015';
 
-const server = new SorobanRpc.Server(rpcUrl, { allowHttp: true });
+const server = new rpcNs.Server(rpcUrl, { allowHttp: true });
 const kp = Keypair.fromSecret(secret);
 const publicKey = kp.publicKey();
 const wasm = readFileSync(wasmPath);
@@ -27,7 +30,7 @@ async function sendTx(build) {
   const tx = await build(account);
   const sim = await server.simulateTransaction(tx);
   if (!sim.result) throw new Error('simulate failed: ' + JSON.stringify(sim));
-  const built = SorobanRpc.assembleTransaction(tx, sim).build();
+  const built = rpcNs.assembleTransaction(tx, sim).build();
   built.sign(kp);
   const sent = await server.sendTransaction(built);
   if (sent.status !== 'PENDING' && sent.status !== 'DUPLICATE') {
@@ -85,7 +88,14 @@ await sendTx((account) =>
 );
 console.log('createContract done');
 
-const contractId = StrKey.encodeContract(hash(preimage.toXDR()));
+const networkId = hash(Buffer.from(NETWORK, 'utf8'));
+const idPreimage = xdr.HashIdPreimage.envelopeTypeContractId(
+  new xdr.HashIdPreimageContractId({
+    networkId: Buffer.from(networkId),
+    contractIdPreimage: preimage,
+  })
+);
+const contractId = StrKey.encodeContract(hash(idPreimage.toXDR()));
 console.log('contractId:', contractId);
 
 // 3. validate derived id against RPC
