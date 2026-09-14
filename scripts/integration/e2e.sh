@@ -44,8 +44,15 @@ FRONTEND_PID=""
 FAILURES=()
 
 cleanup() {
-  [ -n "$BACKEND_PID" ] && kill "$BACKEND_PID" 2>/dev/null || true
-  [ -n "$FRONTEND_PID" ] && kill "$FRONTEND_PID" 2>/dev/null || true
+  for pid in "$BACKEND_PID" "$FRONTEND_PID"; do
+    [ -n "$pid" ] || continue
+    kill "$pid" 2>/dev/null || true
+    pkill -P "$pid" 2>/dev/null || true
+  done
+  sleep 1
+  for pid in "$BACKEND_PID" "$FRONTEND_PID"; do
+    [ -n "$pid" ] && kill "$pid" 2>/dev/null || true
+  done
   if [ "${KEEP:-}" != "1" ]; then
     rm -rf "$TMPDIR_E2E"
   else
