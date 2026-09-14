@@ -1,0 +1,26 @@
+{
+  "name": "utility-backend",
+  "version": "0.1.0",
+  "description": "Soroban event indexer, SQLite cache, and REST/WebSocket API for the Utility Protocol.",
+  "type": "module",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@stellar/stellar-sdk": "^12.2.1",
+    "better-sqlite3": "^11.5.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "supertest": "^7.0.0"
+  }
+}
