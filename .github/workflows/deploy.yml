@@ -1,0 +1,16 @@
+name: Deploy Backend (Production)
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    name: Deploy Backend Service
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Production Deployment Stub
+        run: |
+          echo "Backend production deployment triggered on main."
+          # Insert container build or VPS deployment commands
